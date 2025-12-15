@@ -2,7 +2,8 @@ name: Coros Data Sync
 
 on:
   schedule:
-    - cron: '0 22 * * *'  # 北京时间早上6点运行
+    # ⏱️ 修改这里：*/15 表示每 15 分钟运行一次
+    - cron: '*/15 * * * *'
   workflow_dispatch:      # 允许手动点按钮运行
 
 jobs:
