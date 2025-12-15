@@ -1,0 +1,5 @@
+stravalib
+gspread
+oauth2client
+pandas
+python-dotenv
