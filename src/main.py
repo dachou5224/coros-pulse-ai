@@ -1,7 +1,6 @@
 import os
 import json
 import time
-from datetime import datetime
 import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -14,10 +13,13 @@ STRAVA_REFRESH_TOKEN = os.getenv('STRAVA_REFRESH_TOKEN')
 GOOGLE_JSON_KEY = os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON')
 SHEET_NAME = "Coros_Running_Data"
 
+# ⚠️ 安全限制：每次运行最多处理多少条详情？
+# Strava 限制 15分钟 100次。
+# 我们设为 80，留 20 次作为余量（给 List 请求和重试使用）。
+BATCH_SIZE = 80 
+
 def get_strava_client():
-    if not STRAVA_REFRESH_TOKEN:
-        print("错误：未配置 STRAVA_REFRESH_TOKEN")
-        return None
+    if not STRAVA_REFRESH_TOKEN: return None
     client = Client()
     try:
         refresh_response = client.refresh_access_token(
@@ -32,9 +34,7 @@ def get_strava_client():
         return None
 
 def get_google_sheet():
-    if not GOOGLE_JSON_KEY:
-        print("错误：未配置 GOOGLE_JSON_KEY")
-        return None
+    if not GOOGLE_JSON_KEY: return None
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
     try:
         creds_dict = json.loads(GOOGLE_JSON_KEY)
@@ -48,96 +48,150 @@ def get_google_sheet():
             sh = client.create(SHEET_NAME)
             sh.share(creds_dict['client_email'], perm_type='user', role='owner')
             sheet = sh.sheet1
-            # 初始化表头
+            # 初始化豪华表头
             sheet.append_row([
                 "Activity ID", "Date", "Name", "Distance (km)", "Duration (min)", 
-                "Avg Pace", "Avg HR", "Elevation Gain (m)", "Cadence (spm)", "Type"
+                "Avg Pace", "Max Pace", "Avg HR", "Max HR", "Suffer Score",      
+                "Avg Power (w)", "Cadence (spm)", "Elevation Gain (m)", 
+                "Calories (kcal)", "Temperature (C)", "Shoes", "Type", "Splits (JSON)"
             ])
             return sheet
     except Exception as e:
         print(f"Google Sheets 连接失败: {e}")
         return None
 
-def process_activity(activity):
-    dist_km = round(float(activity.distance) / 1000, 2)
-    duration_min = round(activity.moving_time.total_seconds() / 60, 2)
-    
-    avg_pace = "0'00\""
-    if activity.average_speed > 0:
-        pace_decimal = (1000 / float(activity.average_speed)) / 60
-        pace_min = int(pace_decimal)
-        pace_sec = int((pace_decimal - pace_min) * 60)
-        avg_pace = f"{pace_min}'{pace_sec:02d}\""
+def get_pace_str(speed_mps):
+    if not speed_mps or speed_mps <= 0: return "0'00\""
+    pace_decimal = (1000 / float(speed_mps)) / 60
+    pace_min = int(pace_decimal)
+    pace_sec = int((pace_decimal - pace_min) * 60)
+    return f"{pace_min}'{pace_sec:02d}\""
 
-    return [
-        str(activity.id),
-        activity.start_date_local.strftime("%Y-%m-%d %H:%M:%S"),
-        activity.name,
-        dist_km,
-        duration_min,
-        avg_pace,
-        activity.average_heartrate if activity.average_heartrate else 0,
-        float(activity.total_elevation_gain),
-        (activity.average_cadence * 2) if activity.average_cadence else 0,
-        activity.type
-    ]
+def process_activity_detail(activity_id, client):
+    """单独封装：根据 ID 获取详情并处理"""
+    try:
+        # ⚠️ 这里消耗 1 次 API额度
+        detail = client.get_activity(activity_id)
+        
+        # 基础数据
+        dist_km = round(float(detail.distance) / 1000, 2)
+        duration_min = round(detail.moving_time.total_seconds() / 60, 2)
+        avg_pace = get_pace_str(detail.average_speed)
+        max_pace = get_pace_str(detail.max_speed)
+
+        # Splits
+        splits_data = []
+        if hasattr(detail, 'splits_metric') and detail.splits_metric:
+            for s in detail.splits_metric:
+                split_pace = get_pace_str(s.average_speed)
+                split_hr = s.average_heartrate if hasattr(s, 'average_heartrate') else 0
+                splits_data.append({"km": s.split, "pace": split_pace, "hr": round(split_hr)})
+        splits_json = json.dumps(splits_data, ensure_ascii=False)
+
+        # Shoes
+        shoe_name = ""
+        if detail.gear_id:
+            try:
+                shoe_name = detail.gear.name if hasattr(detail.gear, 'name') else detail.gear_id
+            except: pass
+
+        return [
+            str(detail.id),
+            detail.start_date_local.strftime("%Y-%m-%d %H:%M:%S"),
+            detail.name,
+            dist_km,
+            duration_min,
+            avg_pace,
+            max_pace,
+            detail.average_heartrate if detail.average_heartrate else 0,
+            detail.max_heartrate if detail.max_heartrate else 0,
+            detail.suffer_score if hasattr(detail, 'suffer_score') else 0,
+            detail.average_watts if hasattr(detail, 'average_watts') else 0,
+            (detail.average_cadence * 2) if detail.average_cadence else 0,
+            float(detail.total_elevation_gain),
+            detail.kilojoules if hasattr(detail, 'kilojoules') else 0,
+            detail.average_temp if hasattr(detail, 'average_temp') else "",
+            shoe_name,
+            detail.type,
+            splits_json
+        ]
+    except Exception as e:
+        print(f"处理 ID {activity_id} 失败: {e}")
+        return None
 
 def main():
-    print("🚀 开始同步 Coros (Strava) 数据...")
+    print("🚀 启动历史数据回溯模式 (Backfill Mode)...")
     strava = get_strava_client()
     sheet = get_google_sheet()
     
-    if not strava or not sheet:
-        return
+    if not strava or not sheet: return
 
-    # 1. 检查现有数据量
+    # 1. 获取已保存的 ID
     existing_ids = set()
-    is_first_run = True
     try:
         records = sheet.get_all_records()
         if records:
             df = pd.DataFrame(records)
             existing_ids = set(df['Activity ID'].astype(str).tolist())
-            is_first_run = False
-            print(f"📊 表中已有 {len(existing_ids)} 条数据。")
-    except Exception as e:
-        print(f"读取现有数据跳过 (可能是新表): {e}")
+            print(f"📊 本地已有数据: {len(existing_ids)} 条")
+    except:
+        print("📊 似乎是空表，准备开始全量抓取。")
 
-    # 2. 智能设置抓取数量
-    # 如果是第一次运行（或空表），抓取无限多(limit=None)；否则只看最近50条
-    limit_count = None if is_first_run else 50
-    if is_first_run:
-        print("🌟 检测到首次运行，正在全量抓取历史数据（这可能需要几分钟）...")
-    else:
-        print("🔄 检测到增量更新，正在检查最近 50 条活动...")
-
-    # 3. 获取数据
+    # 2. 获取 Strava 上的"所有"活动摘要
+    # Strava List API 很便宜，一次可以拉 200 条，我们可以拉个几千条
+    # 只要不调用 get_activity() 就不消耗昂贵的详细额度
+    print("☁️ 正在拉取 Strava 活动清单 (这可能需要一点时间)...")
     try:
-        activities = strava.get_activities(limit=limit_count)
+        # limit=3000 大概能覆盖过去 3-5 年的数据
+        # 这里的 iterator 是惰性的，我们把它转成 list 方便过滤
+        # 注意：这里会消耗大约 10-15 次 API 额度 (3000/200)
+        summary_iterator = strava.get_activities(limit=3000) 
+        
+        to_sync_ids = []
+        for summary in summary_iterator:
+            if summary.type != "Run": continue
+            if str(summary.id) not in existing_ids:
+                to_sync_ids.append(summary.id)
+        
+        print(f"🔍 扫描完成！共发现 {len(to_sync_ids)} 条【缺失】数据待同步。")
+        
+        if not to_sync_ids:
+            print("🎉 所有历史数据已同步完毕！")
+            return
+
+        # 3. 截取本次任务的批次 (Batch)
+        # 按照时间顺序，为了让表格好看，我们从列表末尾（最旧的）开始拿？
+        # Strava 返回的是 Newest First。
+        # 如果我们想补齐历史，建议还是处理最新的缺失数据，或者直接按顺序处理。
+        # 这里直接取前 BATCH_SIZE 个 (最新的 80 个缺失的)
+        current_batch = to_sync_ids[:BATCH_SIZE]
+        
+        print(f"⚙️ 本次运行将处理 {len(current_batch)} 条数据 (API 安全限制)...")
+        
         new_rows = []
-        
-        # 遍历活动
-        for act in activities:
-            if act.type != "Run": continue
-            if str(act.id) in existing_ids: continue
+        for idx, act_id in enumerate(current_batch):
+            print(f"[{idx+1}/{len(current_batch)}] 正在下载详情 ID: {act_id} ...")
+            row = process_activity_detail(act_id, strava)
+            if row:
+                new_rows.append(row)
+            # 稍微停顿，温柔一点
+            time.sleep(0.5)
             
-            # 简单的进度打印
-            if is_first_run and len(new_rows) % 50 == 0 and len(new_rows) > 0:
-                print(f"已处理 {len(new_rows)} 条待同步数据...")
-                
-            new_rows.append(process_activity(act))
-        
-        # 4. 批量写入 (Batch Write)
+        # 4. 写入表格
         if new_rows:
-            new_rows.reverse() # 让旧的在上面，新的在下面
-            print(f"📝 正在将 {len(new_rows)} 条新数据写入 Google Sheets...")
-            sheet.append_rows(new_rows) # 关键优化：一次性写入
-            print(f"✅ 同步完成！")
-        else:
-            print("💤 没有发现新数据。")
-            
+            # 翻转一下，让旧的在上面？或者直接追加。
+            # 如果想保持时间倒序（最新的在最下面），因为 current_batch 是最新的在前面
+            # 所以 new_rows 0 是最新的。
+            # 我们直接 append_rows，顺序无所谓，反正 Google Sheets 可以按日期排序
+            new_rows.reverse() # 这样追加进去，最新的会在最下面
+            print(f"📝 正在写入 Google Sheets...")
+            sheet.append_rows(new_rows)
+            print(f"✅ 本次批次完成！已同步 {len(new_rows)} 条。")
+            print(f"⏳ 剩余待同步: {len(to_sync_ids) - len(new_rows)} 条。")
+            print("💤 休息 15 分钟后继续...")
+        
     except Exception as e:
-        print(f"运行过程中出错: {e}")
+        print(f"运行出错: {e}")
 
 if __name__ == "__main__":
     main()
