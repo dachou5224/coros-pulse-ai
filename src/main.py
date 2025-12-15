@@ -12,7 +12,7 @@ STRAVA_CLIENT_ID = os.getenv('STRAVA_CLIENT_ID')
 STRAVA_CLIENT_SECRET = os.getenv('STRAVA_CLIENT_SECRET')
 STRAVA_REFRESH_TOKEN = os.getenv('STRAVA_REFRESH_TOKEN')
 GOOGLE_JSON_KEY = os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON')
-SHEET_NAME = "Coros_Running_Data" # 你的 Google Sheet 名字，必须完全一致
+SHEET_NAME = "Coros_Running_Data"
 
 def get_strava_client():
     if not STRAVA_REFRESH_TOKEN:
@@ -40,7 +40,6 @@ def get_google_sheet():
         creds_dict = json.loads(GOOGLE_JSON_KEY)
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
-        # 尝试打开表格，不存在则创建
         try:
             sheet = client.open(SHEET_NAME).sheet1
             return sheet
@@ -49,6 +48,7 @@ def get_google_sheet():
             sh = client.create(SHEET_NAME)
             sh.share(creds_dict['client_email'], perm_type='user', role='owner')
             sheet = sh.sheet1
+            # 初始化表头
             sheet.append_row([
                 "Activity ID", "Date", "Name", "Distance (km)", "Duration (min)", 
                 "Avg Pace", "Avg HR", "Elevation Gain (m)", "Cadence (spm)", "Type"
@@ -90,36 +90,54 @@ def main():
     if not strava or not sheet:
         return
 
-    # 获取现有 ID
+    # 1. 检查现有数据量
     existing_ids = set()
+    is_first_run = True
     try:
         records = sheet.get_all_records()
         if records:
             df = pd.DataFrame(records)
             existing_ids = set(df['Activity ID'].astype(str).tolist())
+            is_first_run = False
+            print(f"📊 表中已有 {len(existing_ids)} 条数据。")
     except Exception as e:
         print(f"读取现有数据跳过 (可能是新表): {e}")
 
-    # 获取 Strava 最近 30 条跑步数据
+    # 2. 智能设置抓取数量
+    # 如果是第一次运行（或空表），抓取无限多(limit=None)；否则只看最近50条
+    limit_count = None if is_first_run else 50
+    if is_first_run:
+        print("🌟 检测到首次运行，正在全量抓取历史数据（这可能需要几分钟）...")
+    else:
+        print("🔄 检测到增量更新，正在检查最近 50 条活动...")
+
+    # 3. 获取数据
     try:
-        activities = strava.get_activities(limit=30)
+        activities = strava.get_activities(limit=limit_count)
         new_rows = []
+        
+        # 遍历活动
         for act in activities:
             if act.type != "Run": continue
             if str(act.id) in existing_ids: continue
             
-            print(f"发现新活动: {act.name} ({act.start_date_local})")
+            # 简单的进度打印
+            if is_first_run and len(new_rows) % 50 == 0 and len(new_rows) > 0:
+                print(f"已处理 {len(new_rows)} 条待同步数据...")
+                
             new_rows.append(process_activity(act))
         
+        # 4. 批量写入 (Batch Write)
         if new_rows:
-            new_rows.reverse() # 旧的先入库
-            for row in new_rows:
-                sheet.append_row(row)
-            print(f"✅ 成功同步 {len(new_rows)} 条数据！")
+            new_rows.reverse() # 让旧的在上面，新的在下面
+            print(f"📝 正在将 {len(new_rows)} 条新数据写入 Google Sheets...")
+            sheet.append_rows(new_rows) # 关键优化：一次性写入
+            print(f"✅ 同步完成！")
         else:
             print("💤 没有发现新数据。")
+            
     except Exception as e:
-        print(f"获取活动列表失败: {e}")
+        print(f"运行过程中出错: {e}")
 
 if __name__ == "__main__":
     main()
