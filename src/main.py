@@ -174,12 +174,26 @@ def main():
                 new_rows.append(row)
             time.sleep(0.5)
             
+# ... (前面的代码不变) ...
+
         if new_rows:
-            new_rows.reverse()
+            # 这里原本是 new_rows.reverse()，如果你希望最新的在最上面，可以去掉 reverse
+            # 但为了保险，我们不管怎么插入，最后都做一个全表排序
+            
             print(f"📝 正在写入 Google Sheets...")
             sheet.append_rows(new_rows)
             print(f"✅ 本次批次完成！已同步 {len(new_rows)} 条。")
-        
+            
+            # --- 🆕 新增：自动排序逻辑 ---
+            print("🧹 正在按日期重新排序 (最新的在最上面)...")
+            try:
+                # 假设 Date 是第 2 列
+                # range='A2:R' 表示不排序第一行表头，从第2行开始排
+                # sort_order='DES' 表示降序 (最新的在上面)，'ASC' 表示升序 (最旧的在上面)
+                sheet.sort((2, 'des'), range=f'A2:R{sheet.row_count}') 
+            except Exception as e:
+                print(f"排序失败 (可能是权限或表头问题，不影响数据): {e}")
+
     except Exception as e:
         print(f"运行出错: {e}")
 
