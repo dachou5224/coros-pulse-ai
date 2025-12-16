@@ -109,7 +109,54 @@ def get_current_vdot(df, end_date, window_days=42):
     
     # 关键：取最大值 (代表你的潜能上限)
     return max(vdot_values)
+    
+def parse_pace_to_speed(pace_str):
+    """辅助：把 5'30" 转成 速度值 (km/h 或 m/s 均可，这里用 m/s)"""
+    try:
+        if not isinstance(pace_str, str): return 0
+        mins = int(pace_str.split("'")[0])
+        secs = int(pace_str.split("'")[1].replace('"',''))
+        total_sec = mins * 60 + secs
+        if total_sec == 0: return 0
+        return 1000 / total_sec # m/s
+    except:
+        return 0
 
+def calculate_decoupling(splits_json):
+    """
+    🧪 核心算法：计算有氧脱钩率 (Pw:HR)
+    """
+    try:
+        splits = json.loads(splits_json)
+        # 只有分段数量足够（至少4km）才计算，太短没意义
+        if not splits or len(splits) < 4: 
+            return None 
+        
+        # 简单的切分：前半程 vs 后半程
+        half_idx = len(splits) // 2
+        first_half = splits[:half_idx]
+        second_half = splits[half_idx:]
+        
+        # 计算两段的平均速度和平均心率
+        v1 = np.mean([parse_pace_to_speed(s['pace']) for s in first_half])
+        h1 = np.mean([s['hr'] for s in first_half])
+        
+        v2 = np.mean([parse_pace_to_speed(s['pace']) for s in second_half])
+        h2 = np.mean([s['hr'] for s in second_half])
+        
+        if h1 == 0 or h2 == 0: return None
+        
+        # 效率系数 (Efficiency Factor) = Speed / HR
+        ef1 = v1 / h1
+        ef2 = v2 / h2
+        
+        # 脱钩率
+        decoupling = (ef1 - ef2) / ef1 * 100
+        return round(decoupling, 2)
+        
+    except Exception as e:
+        return None
+        
 # ... main 函数 ...
 def main():
     print("🚀 启动历史周报回溯生成器 (History Backfill)...")
@@ -213,7 +260,7 @@ def main():
     rows_to_write = []
     
     # 🆕 表头增加 VDOT
-    headers = ["Week Start", "Week End", "Distance (km)", "Runs", "Avg Pace", "Weekly Load", "Fitness (CTL)", "Form (TSB)", "VDOT", "Status"]
+    headers = ["Week Start", "Week End", "Distance (km)", "Runs", "Avg Pace", "Weekly Load", "Fitness (CTL)", "Form (TSB)", "VDOT", "LSD Decouple", "Status"]
     
     for date_idx, row in final_report.iterrows():
         # 如果这一周没有任何数据且 TSB 还没建立起来，跳过
@@ -222,7 +269,19 @@ def main():
             
         week_end = date_idx
         week_start = week_end - timedelta(days=6)
-        
+        # 🆕 在原始 df 中，筛选出这一周的数据
+        mask_week = (df['Date'] >= week_start) & (df['Date'] <= week_end)
+        this_week_runs = df[mask_week]
+    
+        lsd_decouple = "-"
+        if not this_week_runs.empty:
+            # 找最长的一单
+            longest_idx = this_week_runs['Duration (min)'].idxmax()
+            longest_run = this_week_runs.loc[longest_idx]
+            if longest_run['Duration (min)'] > 30:
+                 dc = calculate_decoupling(longest_run['Splits (JSON)'])
+                 if dc is not None:
+                 lsd_decouple = f"{dc}%"
         # 🆕 计算这周结束时的 VDOT (过去 42 天窗口)
         # 这里的 df 是全局所有的原始跑步数据
         # 我们传入 week_end 作为截止时间点
@@ -245,6 +304,7 @@ def main():
             round(row['CTL'], 1),
             round(row['TSB'], 1),
             current_vdot, # <--- 填入数据
+            lsd_decouple, # <--- 插入这里
             status_text
         ])
 
