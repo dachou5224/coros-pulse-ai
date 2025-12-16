@@ -1,0 +1,31 @@
+name: Weekly Running Analysis
+
+on:
+  schedule:
+    # 每周一早上 8:00 (北京时间) = UTC 0:00
+    - cron: '0 0 * * 1'
+  workflow_dispatch: # 允许手动点击按钮触发测试
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Run Analysis Script
+      env:
+        # 复用之前设置好的 Google 密钥
+        GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_JSON_KEY }}
+      run: python src/analysis.py
