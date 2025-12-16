@@ -115,7 +115,52 @@ def get_current_vdot(df, end_date, window_days=42):
     
     # 关键：取最大值 (代表你的潜能上限)
     return max(vdot_values)
+def parse_pace_to_speed(pace_str):
+    """辅助：把 5'30" 转成 速度值 (km/h 或 m/s 均可，这里用 m/s)"""
+    try:
+        if not isinstance(pace_str, str): return 0
+        mins = int(pace_str.split("'")[0])
+        secs = int(pace_str.split("'")[1].replace('"',''))
+        total_sec = mins * 60 + secs
+        if total_sec == 0: return 0
+        return 1000 / total_sec # m/s
+    except:
+        return 0
 
+def calculate_decoupling(splits_json):
+    """
+    🧪 核心算法：计算有氧脱钩率 (Pw:HR)
+    """
+    try:
+        splits = json.loads(splits_json)
+        # 只有分段数量足够（至少4km）才计算，太短没意义
+        if not splits or len(splits) < 4: 
+            return None 
+        
+        # 简单的切分：前半程 vs 后半程
+        half_idx = len(splits) // 2
+        first_half = splits[:half_idx]
+        second_half = splits[half_idx:]
+        
+        # 计算两段的平均速度和平均心率
+        v1 = np.mean([parse_pace_to_speed(s['pace']) for s in first_half])
+        h1 = np.mean([s['hr'] for s in first_half])
+        
+        v2 = np.mean([parse_pace_to_speed(s['pace']) for s in second_half])
+        h2 = np.mean([s['hr'] for s in second_half])
+        
+        if h1 == 0 or h2 == 0: return None
+        
+        # 效率系数 (Efficiency Factor) = Speed / HR
+        ef1 = v1 / h1
+        ef2 = v2 / h2
+        
+        # 脱钩率
+        decoupling = (ef1 - ef2) / ef1 * 100
+        return round(decoupling, 2)
+        
+    except Exception as e:
+        return None
 # ... main 函数 ...
 def main():
     print("🚀 开始执行周报分析 (AI Analyst)...")
@@ -205,6 +250,22 @@ def main():
     # 注意：我们用 last_monday + 7天 (即本周结束时) 作为基准点
     current_vdot = get_current_vdot(df, this_monday, window_days=42)
     
+    # 🆕 寻找本周的“长距离跑” (LSD) 并计算脱钩率
+    # 逻辑：找到本周距离最长的一条记录
+    longest_run_decoupling = "-"
+    try:
+        if not weekly_data.empty:
+            # 找到距离最大的那一行
+            longest_run = weekly_data.loc[weekly_data['Duration (min)'].idxmax()]
+            
+            # 如果这单长距离 > 30分钟 (太短算脱钩没意义)
+            if pd.to_numeric(longest_run['Duration (min)']) > 30:
+                dc = calculate_decoupling(longest_run['Splits (JSON)'])
+                if dc is not None:
+                    longest_run_decoupling = f"{dc}%"
+    except Exception as e:
+        print(f"⚠️ 计算脱钩率出错: {e}")
+        
     # 准备周报行数据
     # 平均配速计算需要把 "5'30"" 转成秒
     def parse_pace(p_str):
@@ -232,6 +293,8 @@ def main():
         round(weekly_data['TRIMP'].sum()),         # Total Load
         round(current_ctl, 1),                     # Fitness
         round(current_tsb, 1),                     # Form
+        current_vdot,
+        longest_run_decoupling, # <--- 新增：长距离脱钩率
         "恢复" if current_tsb > 10 else ("适中" if current_tsb > -10 else "疲劳")
     ]
     
@@ -244,7 +307,7 @@ def main():
         except:
             print("✨ 新建 Weekly_Report 表...")
            report_ws = sh.add_worksheet(title="Weekly_Report", rows=100, cols=20)
-            report_ws.append_row(["Start Date", "End Date", "Distance (km)", "Runs", "Avg Pace", "Weekly Load", "Fitness (CTL)", "Form (TSB)", "VDOT", "Status"]) # <--- 加了 VDOT
+            report_ws.append_row(["Start Date", "End Date", "Distance (km)", "Runs", "Avg Pace", "Weekly Load", "Fitness (CTL)", "Form (TSB)", "VDOT", "LSD Decouple", "Status"]) # <--- 加了 VDOT
             
         # 检查是否已经写过这一周（防止重复写入）
         existing_reports = report_ws.get_all_values()
