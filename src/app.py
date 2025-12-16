@@ -1,142 +1,231 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-import plotly.express as px
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-import json
 
-# --- 页面配置 ---
+# --- 📱 页面配置 (移动端优化) ---
 st.set_page_config(
-    page_title="Coros Pulse Dashboard",
+    page_title="Coros Pulse",
     page_icon="🏃‍♂️",
-    layout="wide"
+    layout="centered", # 手机端使用 centered 布局视觉更聚焦
+    initial_sidebar_state="collapsed" # 默认收起侧边栏
 )
 
-# --- 1. 连接 Google Sheets (使用 Streamlit Secrets) ---
-@st.cache_data(ttl=600) # 缓存数据 10 分钟，防止频繁请求
-def load_data():
-    # 从 Streamlit 的云端密钥中读取配置
-    # 注意：部署时我们需要在后台填入这些信息
-    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+# --- 🎨 自定义 CSS (美化界面) ---
+st.markdown("""
+    <style>
+    /* 隐藏 Streamlit 默认的菜单和页脚 */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
     
-    # 构造认证信息字典
-    creds_dict = {
-        "type": st.secrets["gcp_service_account"]["type"],
-        "project_id": st.secrets["gcp_service_account"]["project_id"],
-        "private_key_id": st.secrets["gcp_service_account"]["private_key_id"],
-        "private_key": st.secrets["gcp_service_account"]["private_key"],
-        "client_email": st.secrets["gcp_service_account"]["client_email"],
-        "client_id": st.secrets["gcp_service_account"]["client_id"],
-        "auth_uri": st.secrets["gcp_service_account"]["auth_uri"],
-        "token_uri": st.secrets["gcp_service_account"]["token_uri"],
-        "auth_provider_x509_cert_url": st.secrets["gcp_service_account"]["auth_provider_x509_cert_url"],
-        "client_x509_cert_url": st.secrets["gcp_service_account"]["client_x509_cert_url"]
+    /* 调整指标卡片的样式 */
+    [data-testid="stMetricValue"] {
+        font-size: 24px !important;
+        font-weight: 700 !important;
     }
     
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-    client = gspread.authorize(creds)
+    /* 调整 Tab 字体 */
+    button[data-baseweb="tab"] > div[data-testid="stMarkdownContainer"] > p {
+        font-size: 16px;
+        font-weight: bold;
+    }
     
-    # 打开表格
-    sheet = client.open("Coros_Running_Data") # 你的表格名字
-    
-    # 读取历史周报
+    /* 给图表加个圆角边框 */
+    .js-plotly-plot {
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- 1. 数据加载函数 (保持不变) ---
+@st.cache_data(ttl=600)
+def load_data():
     try:
+        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+        creds_dict = {
+            "type": st.secrets["gcp_service_account"]["type"],
+            "project_id": st.secrets["gcp_service_account"]["project_id"],
+            "private_key_id": st.secrets["gcp_service_account"]["private_key_id"],
+            "private_key": st.secrets["gcp_service_account"]["private_key"],
+            "client_email": st.secrets["gcp_service_account"]["client_email"],
+            "client_id": st.secrets["gcp_service_account"]["client_id"],
+            "auth_uri": st.secrets["gcp_service_account"]["auth_uri"],
+            "token_uri": st.secrets["gcp_service_account"]["token_uri"],
+            "auth_provider_x509_cert_url": st.secrets["gcp_service_account"]["auth_provider_x509_cert_url"],
+            "client_x509_cert_url": st.secrets["gcp_service_account"]["client_x509_cert_url"]
+        }
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        client = gspread.authorize(creds)
+        sheet = client.open("Coros_Running_Data")
         report_ws = sheet.worksheet("Weekly_Report")
         report_df = pd.DataFrame(report_ws.get_all_records())
-        # 确保 VDOT 等关键列是数字
-        cols_to_num = ['VDOT', 'Fitness (CTL)', 'Form (TSB)', 'Distance (km)']
+        
+        # 数据类型清洗
+        cols_to_num = ['VDOT', 'Fitness (CTL)', 'Form (TSB)', 'Distance (km)', 'Weekly Load']
         for col in cols_to_num:
             if col in report_df.columns:
                 report_df[col] = pd.to_numeric(report_df[col], errors='coerce')
-    except:
-        report_df = pd.DataFrame()
-
-    return report_df
+        
+        return report_df
+    except Exception as e:
+        return pd.DataFrame()
 
 # --- 加载数据 ---
-try:
-    df = load_data()
-    if df.empty:
-        st.error("无法读取 Weekly_Report，请检查表格是否存在。")
-        st.stop()
-except Exception as e:
-    st.error(f"连接 Google Sheets 失败，请检查密钥配置。错误信息: {e}")
+df = load_data()
+
+if df.empty:
+    st.warning("⏳ 数据正在同步中，请稍后再来...")
     st.stop()
 
-# --- 2. 侧边栏 ---
-st.sidebar.title("🏃‍♂️ Coros AI")
-st.sidebar.info("数据源: Coros -> Strava -> Google Sheets")
-st.sidebar.markdown("---")
-st.sidebar.write("**最近更新:**")
-st.sidebar.write(df.iloc[-1]['Week End'] if not df.empty else "-")
-
-# --- 3. 核心指标看板 ---
-st.title("我的训练仪表盘")
-
-# 取最新一周的数据
+# --- 顶部欢迎语 ---
 latest = df.iloc[-1]
 prev = df.iloc[-2] if len(df) > 1 else latest
 
-col1, col2, col3, col4 = st.columns(4)
+st.markdown(f"### 👋 Hi, Runner!")
+st.caption(f"📅 数据更新至: {latest['Week End']}")
 
-with col1:
-    st.metric("本周跑力 (VDOT)", f"{latest['VDOT']}", delta=round(latest['VDOT'] - prev['VDOT'], 1))
+# --- 📱 主要布局：Tab 分页 ---
+tab1, tab2, tab3 = st.tabs(["📊 核心看板", "📝 历史数据", "📖 指标百科"])
 
-with col2:
-    st.metric("当前状态 (TSB)", f"{latest['Form (TSB)']}", 
-              delta=round(latest['Form (TSB)'] - prev['Form (TSB)'], 1),
-              delta_color="inverse") # TSB 跌太多不好，所以反转颜色
+with tab1:
+    # --- 第一行：核心实力 (VDOT & CTL) ---
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric(
+            "🚀 跑力 (VDOT)", 
+            f"{latest['VDOT']}", 
+            delta=round(latest['VDOT'] - prev['VDOT'], 1),
+            help="衡量跑步硬实力的指标，越高越快"
+        )
+    with col2:
+        st.metric(
+            "🔋 体能 (CTL)", 
+            f"{latest['Fitness (CTL)']}", 
+            delta=round(latest['Fitness (CTL)'] - prev['Fitness (CTL)'], 1),
+            help="过去42天的长期训练负荷，代表耐力基础"
+        )
+    
+    # --- 第二行：当前状态 (TSB & Decouple) ---
+    col3, col4 = st.columns(2)
+    with col3:
+        tsb_val = latest['Form (TSB)']
+        # TSB 颜色逻辑：负太多(累)是红，正太多(状态好)是绿
+        st.metric(
+            "❤️ 状态 (TSB)", 
+            f"{tsb_val}", 
+            delta=round(tsb_val - prev['Form (TSB)'], 1),
+            delta_color="inverse", 
+            help="体能 - 疲劳。正值代表状态好，负值代表疲劳"
+        )
+    with col4:
+        lsd_val = latest.get('LSD Decouple', '-')
+        st.metric(
+            "📉 LSD 脱钩率", 
+            str(lsd_val),
+            help="长距离跑后半程的心率漂移程度，越低越好"
+        )
 
-with col3:
-    st.metric("体能储备 (CTL)", f"{latest['Fitness (CTL)']}", delta=round(latest['Fitness (CTL)'] - prev['Fitness (CTL)'], 1))
+    st.markdown("---")
 
-with col4:
-    lsd_val = latest.get('LSD Decouple', '-')
-    st.metric("LSD 脱钩率", lsd_val)
+    # --- 趋势图表 (针对手机优化的图例布局) ---
+    st.markdown("##### 📈 训练状态趋势")
+    
+    fig = go.Figure()
+    
+    # TSB (区域)
+    fig.add_trace(go.Scatter(
+        x=df['Week End'], y=df['Form (TSB)'],
+        name='状态(TSB)',
+        fill='tozeroy',
+        line=dict(color='rgba(255, 99, 71, 0.5)', width=0),
+        fillcolor='rgba(255, 99, 71, 0.2)'
+    ))
+    
+    # CTL (线)
+    fig.add_trace(go.Scatter(
+        x=df['Week End'], y=df['Fitness (CTL)'],
+        name='体能(CTL)',
+        line=dict(color='#1f77b4', width=3)
+    ))
+    
+    # VDOT (点线)
+    fig.add_trace(go.Scatter(
+        x=df['Week End'], y=df['VDOT'],
+        name='跑力(VDOT)',
+        line=dict(color='#2ca02c', width=2, dash='dot'),
+        yaxis='y2'
+    ))
 
-# --- 4. 交互式图表 ---
+    # 布局优化：图例放下面，节省手机宽度
+    fig.update_layout(
+        margin=dict(l=10, r=10, t=10, b=10),
+        height=350,
+        yaxis=dict(showgrid=True, gridcolor='rgba(0,0,0,0.05)'),
+        yaxis2=dict(overlaying='y', side='right', showgrid=False),
+        legend=dict(orientation="h", y=-0.2, x=0.5, xanchor='center'),
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)'
+    )
+    
+    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
-st.markdown("### 📈 状态与体能趋势")
-# 组合图：CTL (线) + TSB (柱/面)
-fig = go.Figure()
+with tab2:
+    st.markdown("##### 🗓️ 历史周报")
+    # 筛选展示的列，使其在手机上不拥挤
+    display_cols = ['Week End', 'Distance (km)', 'Avg Pace', 'VDOT', 'Status']
+    
+    # 简单的表格展示
+    st.dataframe(
+        df[display_cols].sort_index(ascending=False),
+        hide_index=True,
+        use_container_width=True
+    )
 
-# TSB 区域图
-fig.add_trace(go.Scatter(
-    x=df['Week End'], y=df['Form (TSB)'],
-    name='状态 (TSB)',
-    fill='tozeroy',
-    line=dict(color='rgba(255, 99, 71, 0.5)', width=1)
-))
+with tab3:
+    st.markdown("### 📖 指标说明书")
+    
+    with st.expander("🚀 VDOT (跑力值)", expanded=True):
+        st.markdown("""
+        **定义**: 衡量你跑步“硬实力”的指标。类似于汽车的“马力”。
+        
+        **如何解读**:
+        * 📈 **上升**: 说明你的 5km/10km 极限成绩在进步。
+        * ➖ **持平**: 处于维持期，或者只有慢跑没有强度课。
+        * 📉 **下降**: 可能是因为伤病、休赛或天气炎热。
+        """)
 
-# CTL 线图
-fig.add_trace(go.Scatter(
-    x=df['Week End'], y=df['Fitness (CTL)'],
-    name='体能 (CTL)',
-    line=dict(color='blue', width=3)
-))
+    with st.expander("❤️ TSB (状态指数)"):
+        st.markdown("""
+        **定义**: `体能 (CTL) - 疲劳 (ATL)`。反映你身体的“新鲜度”。
+        
+        **信号灯**:
+        * 🟢 **+10 到 +25**: **比赛窗口期**。腿脚轻盈，适合 PB。
+        * ⚪ **-10 到 +10**: **维持期**。身体感觉正常。
+        * 🟡 **-10 到 -30**: **高效训练区**。会有累的感觉，但为了进步是必须的。
+        * 🔴 **低于 -30**: **受伤警戒区**！必须立刻减量休息，不要硬撑。
+        """)
 
-# VDOT 线图 (放到次坐标轴)
-fig.add_trace(go.Scatter(
-    x=df['Week End'], y=df['VDOT'],
-    name='跑力 (VDOT)',
-    line=dict(color='green', width=2, dash='dot'),
-    yaxis='y2'
-))
-
-fig.update_layout(
-    xaxis_title="周次",
-    yaxis_title="Load / TSB",
-    yaxis2=dict(title="VDOT", overlaying='y', side='right'),
-    legend=dict(x=0, y=1.1, orientation='h'),
-    hovermode="x unified"
-)
-
-st.plotly_chart(fig, use_container_width=True)
-
-# --- 5. 数据表格 ---
-st.markdown("### 📋 历史周报明细")
-st.dataframe(
-    df[['Week Start', 'Distance (km)', 'Runs', 'Avg Pace', 'VDOT', 'Form (TSB)', 'Status']].sort_index(ascending=False),
-    use_container_width=True
-)
+    with st.expander("🔋 CTL (体能储备)"):
+        st.markdown("""
+        **定义**: 过去 42 天的加权平均训练负荷。
+        
+        **如何解读**: 
+        这代表你的“耐力底子”。这个线是一步一个脚印跑出来的，掉下来很快，涨上去很慢。
+        * **全马完赛建议**: CTL > 60
+        * **半马完赛建议**: CTL > 40
+        """)
+        
+    with st.expander("📉 LSD 脱钩率 (Decouple)"):
+        st.markdown("""
+        **定义**: 长距离跑中，后半程心率相对于配速的“漂移”程度。
+        
+        **如何解读**:
+        * 🏆 **< 3%**: **顶级耐力**。机器一般的输出稳定性。
+        * ✅ **< 5%**: **优秀**。有氧基础扎实。
+        * ⚠️ **> 8%**: **耐力不足**。后半程心率飙升，身体开始无氧代偿，马拉松容易撞墙。
+        """)
+    
+    st.caption("Designed with ❤️ by Coros-Pulse-AI")
