@@ -201,6 +201,10 @@ def main():
     current_atl = daily_load.ewm(span=7, adjust=False).mean().iloc[-1]
     current_tsb = current_ctl - current_atl
     
+    # 🆕 计算本周生效的 VDOT (基于过去 6 周的最佳表现)
+    # 注意：我们用 last_monday + 7天 (即本周结束时) 作为基准点
+    current_vdot = get_current_vdot(df, this_monday, window_days=42)
+    
     # 准备周报行数据
     # 平均配速计算需要把 "5'30"" 转成秒
     def parse_pace(p_str):
@@ -239,8 +243,8 @@ def main():
             report_ws = sh.worksheet('Weekly_Report')
         except:
             print("✨ 新建 Weekly_Report 表...")
-            report_ws = sh.add_worksheet(title="Weekly_Report", rows=100, cols=20)
-            report_ws.append_row(["Start Date", "End Date", "Distance (km)", "Runs", "Avg Pace", "Weekly Load", "Fitness (CTL)", "Form (TSB)", "Status"])
+           report_ws = sh.add_worksheet(title="Weekly_Report", rows=100, cols=20)
+            report_ws.append_row(["Start Date", "End Date", "Distance (km)", "Runs", "Avg Pace", "Weekly Load", "Fitness (CTL)", "Form (TSB)", "VDOT", "Status"]) # <--- 加了 VDOT
             
         # 检查是否已经写过这一周（防止重复写入）
         existing_reports = report_ws.get_all_values()
