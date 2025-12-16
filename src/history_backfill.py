@@ -269,23 +269,35 @@ def main():
             
         week_end = date_idx
         week_start = week_end - timedelta(days=6)
-        # 🆕 在原始 df 中，筛选出这一周的数据
+        # 1. 计算这周结束时的 VDOT
+        current_vdot = get_current_vdot(df, week_end, window_days=42)
+        
+        # 2. 计算本周长距离跑 (LSD) 的脱钩率
+        lsd_decouple = "-"
+        
+        # 在原始 df 中，筛选出这一周的数据
         mask_week = (df['Date'] >= week_start) & (df['Date'] <= week_end)
         this_week_runs = df[mask_week]
-    
-        lsd_decouple = "-"
+        
         if not this_week_runs.empty:
-            # 找最长的一单
-            longest_idx = this_week_runs['Duration (min)'].idxmax()
-            longest_run = this_week_runs.loc[longest_idx]
-            if longest_run['Duration (min)'] > 30:
-                 dc = calculate_decoupling(longest_run['Splits (JSON)'])
-                 if dc is not None:
-                 lsd_decouple = f"{dc}%"
-        # 🆕 计算这周结束时的 VDOT (过去 42 天窗口)
-        # 这里的 df 是全局所有的原始跑步数据
-        # 我们传入 week_end 作为截止时间点
-        current_vdot = get_current_vdot(df, week_end, window_days=42)
+            # 找最长的一单 (Duration 最大)
+            # 使用 idxmax 找到索引，再提取行
+            try:
+                longest_idx = this_week_runs['Duration (min)'].idxmax()
+                longest_run = this_week_runs.loc[longest_idx]
+                
+                # 只有当长距离超过 30 分钟才计算
+                if pd.to_numeric(longest_run['Duration (min)']) > 30:
+                     # calculate_decoupling 可能会返回 None
+                     dc = calculate_decoupling(longest_run['Splits (JSON)'])
+                     
+                     # --- ⚠️ 之前报错就在这里，请注意缩进 ---
+                     if dc is not None:
+                         lsd_decouple = f"{dc}%" 
+                         # 这里的 lsd_decouple 必须比上面的 if 多 4 个空格
+            except Exception as e:
+                # 容错处理，防止某一行数据异常导致崩溃
+                print(f"计算脱钩率跳过: {e}")
         
         # 格式化配速
         pace_sec = row['Avg Pace']
