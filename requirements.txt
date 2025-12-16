@@ -4,3 +4,5 @@ oauth2client
 pandas
 python-dotenv
 numpy
+streamlit
+plotly
