@@ -1,0 +1,19 @@
+name: Manual History Backfill
+
+on:
+  workflow_dispatch: # 这是一个纯手动触发的任务
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      - name: Install dependencies
+        run: pip install pandas numpy gspread oauth2client
+      - name: Run Backfill Script
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_JSON_KEY }}
+        run: python src/history_backfill.py
