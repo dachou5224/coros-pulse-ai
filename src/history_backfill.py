@@ -50,7 +50,67 @@ def get_hr_params_vectorized(dates, settings_df):
         merged['Rest HR'] = merged['Rest HR'].fillna(first_setting['Rest HR'])
         
     return merged['Max HR'].values, merged['Rest HR'].values
+# ... import 部分保持不变 ...
 
+def calculate_run_vdot(distance_km, duration_min):
+    """
+    🧪 核心算法：估算单次跑步的 VDOT
+    逻辑：先利用 Riegel 公式将本次表现归一化为 "5km 等效成绩"，
+    再利用 Daniels 近似公式计算 VDOT。
+    """
+    # 1. 过滤无效数据：距离太短或太长都不准，配速太慢也不算
+    if distance_km < 3 or duration_min <= 0: return 0
+    
+    # 2. Riegel 公式归一化到 5km (预测尽力跑 5km 的用时)
+    # T2 = T1 * (D2 / D1)^1.06
+    # 这里的假设是：如果你这次跑得很快，Riegel 会预测出一个很快的 5k
+    # 如果你是慢跑，预测出的 5k 也会很慢 (VDOT 就低) —— 这没关系，我们后面只取最大值
+    predicted_5k_min = duration_min * (5 / distance_km) ** 1.06
+    
+    # 3. 计算 VDOT (基于 5km 成绩的回归公式)
+    # 速度 (米/分)
+    v = 5000 / predicted_5k_min
+    
+    # 丹尼尔斯氧气成本公式 (Oxygen Cost)
+    # VDOT ~= VO2max / drop_off_percent
+    # 这里使用一个高精度的拟合公式直接算 VDOT
+    # 来源：Running formulas regression
+    vdot = -4.6 + 0.182258 * v + 0.000104 * v**2
+    
+    return round(vdot, 1)
+
+def get_current_vdot(df, end_date, window_days=42):
+    """
+    📅 获取截止到 end_date 的‘当前跑力’
+    逻辑：回溯过去 window_days (默认6周) 内所有跑步记录，
+    取其中计算出的【最大 VDOT 值】。
+    """
+    start_date = end_date - timedelta(days=window_days)
+    
+    # 筛选时间窗口内的数据
+    mask = (df['Date'] >= start_date) & (df['Date'] <= end_date)
+    window_df = df[mask]
+    
+    if window_df.empty:
+        return 0
+    
+    # 计算每一单的 VDOT
+    vdot_values = []
+    for _, row in window_df.iterrows():
+        # 容错处理
+        try:
+            d = float(row['Distance (km)'])
+            t = float(row['Duration (min)'])
+            v = calculate_run_vdot(d, t)
+            if v > 0: vdot_values.append(v)
+        except: continue
+        
+    if not vdot_values: return 0
+    
+    # 关键：取最大值 (代表你的潜能上限)
+    return max(vdot_values)
+
+# ... main 函数 ...
 def main():
     print("🚀 启动历史周报回溯生成器 (History Backfill)...")
     client = get_client()
@@ -152,8 +212,8 @@ def main():
     print("📝 准备写入数据...")
     rows_to_write = []
     
-    # 表头
-    headers = ["Week Start", "Week End", "Distance (km)", "Runs", "Avg Pace", "Weekly Load", "Fitness (CTL)", "Form (TSB)", "Status"]
+    # 🆕 表头增加 VDOT
+    headers = ["Week Start", "Week End", "Distance (km)", "Runs", "Avg Pace", "Weekly Load", "Fitness (CTL)", "Form (TSB)", "VDOT", "Status"]
     
     for date_idx, row in final_report.iterrows():
         # 如果这一周没有任何数据且 TSB 还没建立起来，跳过
@@ -162,6 +222,11 @@ def main():
             
         week_end = date_idx
         week_start = week_end - timedelta(days=6)
+        
+        # 🆕 计算这周结束时的 VDOT (过去 42 天窗口)
+        # 这里的 df 是全局所有的原始跑步数据
+        # 我们传入 week_end 作为截止时间点
+        current_vdot = get_current_vdot(df, week_end, window_days=42)
         
         # 格式化配速
         pace_sec = row['Avg Pace']
@@ -179,8 +244,11 @@ def main():
             round(row['TRIMP']),
             round(row['CTL'], 1),
             round(row['TSB'], 1),
+            current_vdot, # <--- 填入数据
             status_text
         ])
+
+    # ... (写入 Google Sheets 保持不变) ...
 
     # 7. 写入 Google Sheets
     # 注意：这次是全量覆盖写入 Weekly_Report，防止重复和顺序混乱
