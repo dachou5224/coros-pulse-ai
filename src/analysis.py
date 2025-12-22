@@ -306,7 +306,7 @@ def main():
             report_ws = sh.worksheet('Weekly_Report')
         except:
             print("✨ 新建 Weekly_Report 表...")
-           report_ws = sh.add_worksheet(title="Weekly_Report", rows=100, cols=20)
+            report_ws = sh.add_worksheet(title="Weekly_Report", rows=100, cols=20)
             report_ws.append_row(["Start Date", "End Date", "Distance (km)", "Runs", "Avg Pace", "Weekly Load", "Fitness (CTL)", "Form (TSB)", "VDOT", "LSD Decouple", "Status"]) # <--- 加了 VDOT
             
         # 检查是否已经写过这一周（防止重复写入）
