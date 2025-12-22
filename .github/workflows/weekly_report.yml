@@ -2,8 +2,8 @@ name: Weekly Running Analysis
 
 on:
   schedule:
-    # 每周一早上 8:00 (北京时间) = UTC 0:00
-    - cron: '0 0 * * 1'
+    # 每周日晚上 23:00 (北京时间) = UTC 0:00
+    - cron: '0 15 * * 1'
   workflow_dispatch: # 允许手动点击按钮触发测试
 
 jobs:
