@@ -302,12 +302,21 @@ def main():
 
     # 5. 写入 Weekly_Report
     try:
+        # -------------------------------------------------------
+        # 修复逻辑：尝试获取 'Weekly_Report'，如果不存在才新建
+        # -------------------------------------------------------
         try:
-            report_ws = sh.worksheet('Weekly_Report')
-        except:
-            print("✨ 新建 Weekly_Report 表...")
+            # 尝试直接读取名为 Weekly_Report 的工作表
+            report_ws = sh.worksheet("Weekly_Report")
+        except gspread.WorksheetNotFound:
+            # 如果报错说找不到（WorksheetNotFound），说明是第一次运行，则新建它
             report_ws = sh.add_worksheet(title="Weekly_Report", rows=100, cols=20)
-            report_ws.append_row(["Start Date", "End Date", "Distance (km)", "Runs", "Avg Pace", "Weekly Load", "Fitness (CTL)", "Form (TSB)", "VDOT", "LSD Decouple", "Status"]) # <--- 加了 VDOT
+            # 初始化表头 (新建的时候才需要写表头)
+            headers = ["Week Start", "Week End", "Distance (km)", "Runs", "Avg Pace", 
+                   "Weekly Load", "Fitness (CTL)", "Form (TSB)", "VDOT", 
+                   "LSD Decouple", "Status"]
+            report_ws.append_row(headers)
+        # -------------------------------------------------------
             
         # 检查是否已经写过这一周（防止重复写入）
         existing_reports = report_ws.get_all_values()
