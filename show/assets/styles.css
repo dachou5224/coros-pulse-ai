@@ -1,0 +1,43 @@
+/* 1. 引入高级字体 (Inter + Libre Baskerville) */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap');
+
+/* 2. 全局文字颜色优化 (比纯白更护眼的浅灰白) */
+html, body, [class*="css"] {
+    font-family: 'Inter', sans-serif;
+    color: #e4e4e7; /* Zinc-200: 柔和的浅白 */
+}
+
+/* 3. 标题强化 (使用衬线体，更亮一点) */
+h1, h2, h3, h4, h5, h6 {
+    font-family: 'Libre Baskerville', serif !important;
+    color: #fafafa !important; /* 几乎纯白 */
+    font-weight: 700;
+}
+
+/* 4. 强制背景 (防止 config.toml 没生效时的双重保险) */
+.stApp {
+    background-color: #18181b;
+}
+
+/* 5. 卡片/指标样式 (毛玻璃效果) */
+div[data-testid="stMetric"], div[data-testid="stExpander"] {
+    background-color: rgba(39, 39, 42, 0.6); /* 半透明黑 */
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 15px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+/* 6. 指标数值颜色 (金色高亮) */
+div[data-testid="stMetricValue"] {
+    color: #d4b483 !important;
+}
+
+/* 7. 链接颜色 */
+a {
+    color: #d4b483 !important;
+    text-decoration: none;
+}
+a:hover {
+    text-decoration: underline;
+}

@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Nice AI - Run | 周期训练周报</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+</head>
+<body>
+    <nav class="nav-links">
+        <a href="https://nice-ai.dev" target="_blank" rel="noopener">nice-ai.dev</a>
+        <a href="https://blog.nice-ai.dev" target="_blank" rel="noopener">Blog</a>
+        <a href="https://quant.nice-ai.dev" target="_blank" rel="noopener">Quant</a>
+        <a href="https://chem.nice-ai.dev" target="_blank" rel="noopener">Chem</a>
+        <a href="https://light.nice-ai.dev" target="_blank" rel="noopener">Searchlight</a>
+        <a href="https://word.nice-ai.dev" target="_blank" rel="noopener">Word</a>
+    </nav>
+
+    <h1>Quantified Self</h1>
+    <p>Running Performance & Physiology Tracking</p>
+    <div class="header-accent"></div>
+    <p>数据来自 COROS，经 Python 处理并在此展示。长期跑步训练负荷与生理指标，每周更新。</p>
+
+    <h2>周期训练周报</h2>
+    <div id="loading" class="loading">正在加载数据…</div>
+    <div id="error" class="error" style="display:none;"></div>
+    <div id="main" style="display:none;">
+        <p id="subtitle"></p>
+        <p id="status-line"></p>
+        <div class="kpi-row" id="kpi-row"></div>
+        <hr>
+
+        <div class="cols-2">
+            <div>
+                <h3>体能管理图表 (PMC)（近四周）</h3>
+                <p class="metric-delta">蓝色柱=周负荷，紫色线=体能(CTL)</p>
+                <div id="chart-pmc" class="plotly-graph"></div>
+            </div>
+            <div>
+                <h3>身体状态 (TSB) 分布（近四周）</h3>
+                <p class="metric-delta">TSB &gt; 0 为恢复期，TSB &lt; -20 为疲劳风险区</p>
+                <div id="chart-tsb" class="plotly-graph"></div>
+            </div>
+        </div>
+
+        <h3>效率与能力趋势（近四周）</h3>
+        <div class="cols-2-equal">
+            <div>
+                <div id="chart-vdot" class="plotly-graph"></div>
+            </div>
+            <div>
+                <div id="chart-lsd" class="plotly-graph"></div>
+            </div>
+        </div>
+
+        <h3>更多来自 nice-ai.dev</h3>
+        <div class="more-projects">
+            <p class="metric-delta">本页面是 nice-ai.dev 的跑步数据实验子站 run.nice-ai.dev。</p>
+            <div class="more-projects-grid">
+                <a href="https://nice-ai.dev" target="_blank" rel="noopener">主站主页</a>
+                <a href="https://quant.nice-ai.dev" target="_blank" rel="noopener">量化看板</a>
+                <a href="https://chem.nice-ai.dev" target="_blank" rel="noopener">化工模拟</a>
+                <a href="https://light.nice-ai.dev" target="_blank" rel="noopener">探照灯项目</a>
+                <a href="https://word.nice-ai.dev" target="_blank" rel="noopener">词根背单词</a>
+                <a href="https://blog.nice-ai.dev" target="_blank" rel="noopener">技术博客</a>
+            </div>
+        </div>
+
+        <h3>指标说明书</h3>
+        <details open>
+            <summary>VDOT (跑力值)</summary>
+            <div class="expander-content">
+                <p><strong>定义</strong>: 衡量你跑步“硬实力”的指标。类似于汽车的“马力”。</p>
+                <p><strong>如何解读</strong>: 上升说明 5km/10km 极限成绩在进步；持平为维持期或仅慢跑；下降可能与伤病、休赛或天气有关。</p>
+            </div>
+        </details>
+        <details>
+            <summary>TSB (状态指数)</summary>
+            <div class="expander-content">
+                <p><strong>定义</strong>: 体能 (CTL) - 疲劳 (ATL)。反映身体的“新鲜度”。</p>
+                <p><strong>信号灯</strong>: +10～+25 比赛窗口期；-10～+10 维持期；-10～-30 高效训练区；低于 -30 受伤警戒区，需减量休息。</p>
+            </div>
+        </details>
+        <details>
+            <summary>CTL (体能储备)</summary>
+            <div class="expander-content">
+                <p><strong>定义</strong>: 过去 42 天的加权平均训练负荷。</p>
+                <p>全马完赛建议 CTL &gt; 60，半马完赛建议 CTL &gt; 40。</p>
+            </div>
+        </details>
+        <details>
+            <summary>LSD 脱钩率 (Decouple)</summary>
+            <div class="expander-content">
+                <p><strong>定义</strong>: 长距离跑中后半程心率相对配速的漂移程度。</p>
+                <p>&lt; 3% 顶级耐力；&lt; 5% 优秀；&gt; 8% 耐力不足，马拉松易撞墙。</p>
+            </div>
+        </details>
+        <p class="metric-delta">Designed with ❤️ by Coros-Pulse-AI</p>
+    </div>
+
+    <script src="data.js"></script>
+    <script>
+        (function () {
+            function fmtDate(d) {
+                if (!d) return '-';
+                if (d instanceof Date) return d.toISOString().slice(0, 10);
+                return String(d).slice(0, 10);
+            }
+
+            function fmtNum(x) {
+                if (x == null || isNaN(x)) return '-';
+                return Number(x).toFixed(1);
+            }
+
+            function renderKpis(df, latest, last4) {
+                var row = document.getElementById('kpi-row');
+                row.innerHTML = '';
+                var kpis = [
+                    { label: '本周跑量', key: 'Distance (km)', unit: 'km', reverse: false },
+                    { label: 'Weekly Load', key: 'Weekly Load', unit: '', reverse: false },
+                    { label: 'Fitness (CTL)', key: 'Fitness (CTL)', unit: '', reverse: false },
+                    { label: 'Form (TSB)', key: 'Form (TSB)', unit: '', reverse: false, noDelta: true },
+                    { label: '有氧解耦率', key: 'LSD Decouple', unit: '%', reverse: true }
+                ];
+                kpis.forEach(function (k) {
+                    var v = latest[k.key];
+                    var avg = last4.length ? last4.reduce(function (s, r) { return s + (r[k.key] || 0); }, 0) / last4.length : v;
+                    var delta = k.noDelta ? null : (v - avg);
+                    var div = document.createElement('div');
+                    div.className = 'kpi-col metric-card';
+                    var deltaHtml = k.noDelta ? '' : '<div class="metric-delta">' + (delta >= 0 ? '+' : '') + fmtNum(delta) + ' ' + k.unit + ' (vs 4周均值)</div>';
+                    div.innerHTML = '<div class="metric-value">' + fmtNum(v) + ' ' + k.unit + '</div><div>' + k.label + '</div>' + deltaHtml;
+                    row.appendChild(div);
+                });
+            }
+
+            function renderCharts(df) {
+                var asc = WEEKLY_REPORT.sortByWeekStartAsc(df);
+                var last4 = asc.slice(-4);
+                var weekStart = last4.map(function (r) { return fmtDate(r['Week Start']); });
+                var weekLoad = last4.map(function (r) { return r['Weekly Load'] || 0; });
+                var ctl = last4.map(function (r) { return r['Fitness (CTL)'] || 0; });
+                var tsb = last4.map(function (r) { return r['Form (TSB)'] || 0; });
+                var vdot = last4.map(function (r) { return r['VDOT'] || 0; });
+                var lsd = last4.map(function (r) { return r['LSD Decouple'] != null ? r['LSD Decouple'] : 0; });
+
+                Plotly.newPlot('chart-pmc', [
+                    { x: weekStart, y: weekLoad, type: 'bar', name: 'Weekly Load', marker: { color: 'rgba(59, 130, 246, 0.5)' } },
+                    { x: weekStart, y: ctl, type: 'scatter', mode: 'lines', name: 'Fitness (CTL)', yaxis: 'y2', line: { color: '#8B5CF6', width: 3 } }
+                ], {
+                    yaxis: { title: 'Weekly Load' },
+                    yaxis2: { title: 'CTL', overlaying: 'y', side: 'right' },
+                    hovermode: 'x unified',
+                    legend: { orientation: 'h', y: 1.1 },
+                    margin: { t: 24 },
+                    paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)'
+                }, { responsive: true });
+
+                var tsbColors = tsb.map(function (y) {
+                    if (y >= 0) return '#10B981';
+                    if (y < -20) return '#EF4444';
+                    return '#F59E0B';
+                });
+                var x0 = weekStart[0], x1 = weekStart[weekStart.length - 1];
+                Plotly.newPlot('chart-tsb', [
+                    { x: weekStart, y: tsb, type: 'bar', marker: { color: tsbColors } }
+                ], {
+                    yaxis: { title: 'TSB' },
+                    shapes: [
+                        { type: 'line', x0: x0, x1: x1, y0: 0, y1: 0, line: { color: 'gray', dash: 'dash' } },
+                        { type: 'line', x0: x0, x1: x1, y0: -20, y1: -20, line: { color: 'red', dash: 'dot' } }
+                    ],
+                    margin: { t: 24 },
+                    paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)'
+                }, { responsive: true });
+
+                Plotly.newPlot('chart-vdot', [
+                    { x: weekStart, y: vdot, type: 'scatter', mode: 'lines+markers', name: 'VDOT', line: { color: '#EC4899' } }
+                ], { title: 'VDOT (跑力) 趋势', margin: { t: 36 }, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)' }, { responsive: true });
+
+                Plotly.newPlot('chart-lsd', [
+                    { x: weekStart, y: lsd, type: 'scatter', mode: 'lines+markers', fill: 'tozeroy', name: 'LSD Decouple' }
+                ], {
+                    title: 'LSD 有氧解耦率 (越低越稳)',
+                    shapes: [{ type: 'line', x0: x0, x1: x1, y0: 5, y1: 5, line: { color: 'red', dash: 'dash' }, annotation: { text: '5% 警戒线' } }],
+                    margin: { t: 36 },
+                    paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)'
+                }, { responsive: true });
+            }
+
+            WEEKLY_REPORT.loadData()
+                .then(function (df) {
+                    if (!df || df.length === 0) throw new Error('无数据');
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('main').style.display = 'block';
+
+                    var latest = df[0];
+                    var last4 = df.slice(1, 5);
+                    document.getElementById('subtitle').textContent = '本周概览 (' + fmtDate(latest['Week Start']) + ' ~ ' + fmtDate(latest['Week End']) + ')';
+                    document.getElementById('status-line').innerHTML = '当前状态: <strong>' + (latest.Status || '未知') + '</strong>';
+
+                    renderKpis(df, latest, last4);
+                    renderCharts(df);
+                })
+                .catch(function (err) {
+                    document.getElementById('loading').style.display = 'none';
+                    var el = document.getElementById('error');
+                    el.style.display = 'block';
+                    el.textContent = '加载失败: ' + err.message + '。若为 CORS，可设置 ?data= 为同源 JSON 或使用代理。';
+                });
+        })();
+    </script>
+</body>
+</html>
