@@ -1,3 +1,4 @@
+import re
 import pandas as pd
 import numpy as np
 import gspread
@@ -5,6 +6,11 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime, timedelta
 import os
 import json
+
+try:
+    from coach import get_weekly_advice
+except ImportError:
+    get_weekly_advice = None
 
 # --- 配置 ---
 # 直接复用现有的 Secret
@@ -161,7 +167,17 @@ def calculate_decoupling(splits_json):
         
     except Exception as e:
         return None
-# ... main 函数 ...
+
+
+def _parse_weekly_advice_slots(raw: str) -> dict:
+    """从周报 coach 输出中按【标签】提取三段。"""
+    slots = {}
+    for tag in ["本周总评", "核心诊断", "下周药方"]:
+        m = re.search(rf"【{re.escape(tag)}】\s*(.*?)(?=【|$)", raw, re.DOTALL)
+        slots[tag] = (m.group(1).strip() if m else "")[:50000]
+    return slots
+
+
 def main():
     print("🚀 开始执行周报分析 (AI Analyst)...")
     client = get_client()
@@ -294,44 +310,80 @@ def main():
         round(current_ctl, 1),                     # Fitness
         round(current_tsb, 1),                     # Form
         current_vdot,
-        longest_run_decoupling, # <--- 新增：长距离脱钩率
+        longest_run_decoupling,
         "恢复" if current_tsb > 10 else ("适中" if current_tsb > -10 else "疲劳")
     ]
-    
+    report_row_dict = {
+        "Week Start": report_row[0], "Week End": report_row[1], "Distance (km)": report_row[2],
+        "Runs": report_row[3], "Avg Pace": report_row[4], "Weekly Load": report_row[5],
+        "Fitness (CTL)": report_row[6], "Form (TSB)": report_row[7], "VDOT": report_row[8],
+        "LSD Decouple": longest_run_decoupling, "Status": report_row[10]
+    }
+    # 教练点评：本周总结与下周建议（拉取近期 6–8 周周报供 AI 推断训练季）
+    coach_advice = ""
+    if get_weekly_advice:
+        try:
+            recent_weeks = []
+            try:
+                rpt_ws = sh.worksheet("Weekly_Report")
+                rpt_records = rpt_ws.get_all_records()
+                if rpt_records:
+                    by_week = sorted(rpt_records, key=lambda r: (r.get("Week Start") or r.get("Week End") or ""))
+                    recent_weeks = by_week[-7:]  # 最近 7 周（不含本周，本周在 report_row_dict）
+            except gspread.WorksheetNotFound:
+                pass
+            coach_advice = get_weekly_advice(weekly_data, report_row_dict, recent_weeks_reports=recent_weeks) or "暂无"
+        except Exception as e:
+            print(f"⚠️ 本周教练点评生成失败: {e}")
+            coach_advice = "暂无"
+    else:
+        coach_advice = "暂无"
+    # 解析周报点评为三段；同时保留 raw 全文供静态页 Coach Advice 列展示（新 prompt 用 Emoji 格式时解析为空）
+    slots = _parse_weekly_advice_slots(coach_advice)
+    advice_cols = [slots.get("本周总评", ""), slots.get("核心诊断", ""), slots.get("下周药方", "")]
+    coach_advice_raw = coach_advice if coach_advice and coach_advice != "暂无" else ""
+    report_row_with_advice = report_row + advice_cols + [coach_advice_raw]
     print(f"📊 生成周报: {report_row}")
 
-    # 5. 写入 Weekly_Report
+    # 5. 写入 Weekly_Report（含本周总评、核心诊断、下周药方三列）
     try:
-        # -------------------------------------------------------
-        # 修复逻辑：尝试获取 'Weekly_Report'，如果不存在才新建
-        # -------------------------------------------------------
         try:
-            # 尝试直接读取名为 Weekly_Report 的工作表
             report_ws = sh.worksheet("Weekly_Report")
         except gspread.WorksheetNotFound:
-            # 如果报错说找不到（WorksheetNotFound），说明是第一次运行，则新建它
             report_ws = sh.add_worksheet(title="Weekly_Report", rows=100, cols=20)
-            # 初始化表头 (新建的时候才需要写表头)
-            headers = ["Week Start", "Week End", "Distance (km)", "Runs", "Avg Pace", 
-                   "Weekly Load", "Fitness (CTL)", "Form (TSB)", "VDOT", 
-                   "LSD Decouple", "Status"]
+            headers = ["Week Start", "Week End", "Distance (km)", "Runs", "Avg Pace",
+                       "Weekly Load", "Fitness (CTL)", "Form (TSB)", "VDOT",
+                       "LSD Decouple", "Status", "本周总评", "核心诊断", "下周药方", "Coach Advice"]
             report_ws.append_row(headers)
-        # -------------------------------------------------------
-            
-        # 检查是否已经写过这一周（防止重复写入）
+        existing_header = report_ws.row_values(1)
+        # 若缺少点评列，补全
+        advice_headers = ["本周总评", "核心诊断", "下周药方", "Coach Advice"]
+        for h in advice_headers:
+            if h not in existing_header:
+                col = len(existing_header) + 1
+                report_ws.update_cell(1, col, h)
+                existing_header = report_ws.row_values(1)
         existing_reports = report_ws.get_all_values()
         is_duplicate = False
-        for row in existing_reports:
-            if len(row) > 0 and row[0] == report_row[0]:
+        dup_row_idx = None
+        for i, row in enumerate(existing_reports[1:], start=2):
+            if len(row) > 0 and row[0] == report_row_with_advice[0]:
                 is_duplicate = True
+                dup_row_idx = i
                 break
-        
         if not is_duplicate:
-            report_ws.append_row(report_row)
-            print("✅ 周报已写入 Google Sheets")
+            report_ws.append_row(report_row_with_advice)
+            print("✅ 周报已写入 Google Sheets（含教练点评）")
         else:
-            print("⚠️ 本周周报已存在，跳过写入")
-            
+            # 本周已存在，更新点评列（含 Coach Advice）
+            headers_now = report_ws.row_values(1)
+            to_update = ["本周总评", "核心诊断", "下周药方", "Coach Advice"]
+            vals = advice_cols + [coach_advice_raw]
+            for j, tag in enumerate(to_update):
+                if tag in headers_now and j < len(vals):
+                    col = headers_now.index(tag) + 1
+                    report_ws.update_cell(dup_row_idx, col, vals[j])
+            print("✅ 本周周报教练点评已更新")
     except Exception as e:
         print(f"❌ 写入周报失败: {e}")
 

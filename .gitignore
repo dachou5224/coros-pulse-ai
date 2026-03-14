@@ -6,6 +6,10 @@ __pycache__/
 *.pyo
 .env
 .env.*
+credentials.json
+
+# Generated / build artifacts (root output/ only; archive/output/ is tracked)
+/output/
 
 # Streamlit
 .streamlit/secrets.toml

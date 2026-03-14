@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1080, initial-scale=1">
+  <title>单次跑步点评</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Noto+Sans+SC:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 1080px;
+      min-height: fit-content;
+      height: auto;
+      background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+      font-family: "Noto Sans SC", sans-serif;
+      color: #e0e0e0;
+      position: relative;
+    }
+    .accent-line {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 6px;
+      background: linear-gradient(90deg, #ff6b35 0%, #f7c59f 100%);
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 24px 40px 20px;
+      font-size: 14px;
+      color: #888;
+    }
+    .header .logo { font-weight: 500; }
+    .header .date { font-family: "Noto Sans SC", sans-serif; }
+    .metrics-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 0 40px 28px;
+      gap: 16px;
+    }
+    .metric {
+      flex: 1;
+      text-align: center;
+    }
+    .metric-value {
+      font-family: "Bebas Neue", sans-serif;
+      font-size: 36px;
+      color: #ff6b35;
+      line-height: 1.2;
+      margin-bottom: 6px;
+    }
+    .metric-label {
+      font-size: 12px;
+      color: #888;
+    }
+    .stat-value {
+      font-family: "Bebas Neue", sans-serif;
+      font-size: 36px;
+      color: #ff6b35;
+      line-height: 1.2;
+      margin-bottom: 6px;
+    }
+    .stat-label {
+      font-size: 12px;
+      color: #888;
+    }
+    .elevation-line {
+      padding: 0 40px 16px;
+      font-size: 12px;
+      color: #666;
+      text-align: center;
+    }
+    .tags-row {
+      display: flex;
+      gap: 12px;
+      padding: 0 40px 20px;
+      flex-wrap: wrap;
+    }
+    .tag {
+      border: 1px solid #ff6b35;
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: 13px;
+      color: #ff6b35;
+    }
+    .divider {
+      display: flex;
+      align-items: center;
+      padding: 0 40px 20px;
+      gap: 16px;
+    }
+    .divider-line {
+      flex: 1;
+      height: 1px;
+      background: rgba(255, 255, 255, 0.15);
+    }
+    .divider-text {
+      font-size: 14px;
+      color: #888;
+      white-space: nowrap;
+    }
+    .advice-block {
+      padding: 0 40px 30px;
+    }
+    .advice-text {
+      font-family: "Noto Sans SC", sans-serif;
+      font-size: 16px;
+      line-height: 1.8;
+      color: #e0e0e0;
+      word-break: break-word;
+      white-space: pre-wrap;
+      overflow: visible;
+      height: auto;
+      min-height: 200px;
+    }
+    .next-goal-card {
+      background: rgba(255, 107, 53, 0.1);
+      border-left: 3px solid #ff6b35;
+      padding: 16px;
+      margin-top: 24px;
+    }
+    .next-goal-title {
+      font-size: 13px;
+      color: #ff6b35;
+      margin-bottom: 8px;
+    }
+    .next-goal-content {
+      font-size: 14px;
+      color: #e0e0e0;
+      line-height: 1.6;
+    }
+    .footer {
+      position: relative;
+      padding: 30px 40px;
+      font-size: 12px;
+      color: #666;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="accent-line"></div>
+  <header class="header">
+    <span class="logo">AI COACH</span>
+    <span class="date">{{date}}</span>
+  </header>
+  <section class="metrics-row">
+    <div class="metric">
+      <div class="metric-value">{{distance}}</div>
+      <div class="metric-label">距离 (km)</div>
+    </div>
+    <div class="metric">
+      <div class="stat-value">{{duration}}</div>
+      <div class="stat-label">时长 (min)</div>
+    </div>
+    <div class="metric">
+      <div class="metric-value">{{pace}}</div>
+      <div class="metric-label">配速</div>
+    </div>
+    <div class="metric">
+      <div class="metric-value">{{avg_hr}}</div>
+      <div class="metric-label">心率 (bpm)</div>
+    </div>
+    <div class="metric">
+      <div class="metric-value">{{cadence}}</div>
+      <div class="metric-label">步频 (spm)</div>
+    </div>
+  </section>
+  <div class="elevation-line">{{elevation}}</div>
+  <div class="tags-row">
+    <span class="tag">{{training_type}}</span>
+    <span class="tag">{{goal_race}}</span>
+  </div>
+  <div class="divider">
+    <span class="divider-line"></span>
+    <span class="divider-text">教练点评</span>
+    <span class="divider-line"></span>
+  </div>
+  <div class="advice-block">
+    <div class="advice-text">{{advice_text}}</div>
+    <div class="next-goal-card">
+      <div class="next-goal-title">📌 下次目标</div>
+      <div class="next-goal-content">{{next_goal}}</div>
+    </div>
+  </div>
+  <footer class="footer">
+    {{brand_tag}}
+  </footer>
+</body>
+</html>

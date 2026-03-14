@@ -2,8 +2,8 @@ name: Weekly Running Analysis
 
 on:
   schedule:
-    # 每周日晚上 23:00 (北京时间) = UTC 0:00
-    - cron: '0 15 * * 1'
+    # 每周日晚上 23:00 北京时间 = 15:00 UTC 周日
+    - cron: '0 15 * * 0'
   workflow_dispatch: # 允许手动点击按钮触发测试
 
 jobs:
@@ -26,6 +26,7 @@ jobs:
         
     - name: Run Analysis Script
       env:
-        # 复用之前设置好的 Google 密钥
         GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_JSON_KEY }}
+        API_KEY: ${{ secrets.API_KEY }}
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       run: python src/analysis.py

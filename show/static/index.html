@@ -30,6 +30,10 @@
         <p id="subtitle"></p>
         <p id="status-line"></p>
         <div class="kpi-row" id="kpi-row"></div>
+        <div id="coach-weekly-block" class="coach-advice-block" style="display:none;">
+            <h3>本周教练点评</h3>
+            <p id="coach-weekly-text" class="coach-advice"></p>
+        </div>
         <hr>
 
         <div class="cols-2">
@@ -53,6 +57,12 @@
             <div>
                 <div id="chart-lsd" class="plotly-graph"></div>
             </div>
+        </div>
+
+        <div id="activity-advice-block" class="activity-advice-block" style="display:none;">
+            <h3>单次跑步教练点评</h3>
+            <p class="metric-delta">最近若干次跑步的 AI 教练点评；可与 Strava 数据摘要对照。需在 Google 表格中发布 Activities 表为 CSV，并通过 <code>?activity_advice=URL</code> 传入。</p>
+            <div id="activity-advice-list"></div>
         </div>
 
         <h3>更多来自 nice-ai.dev</h3>
@@ -190,26 +200,73 @@
                 }, { responsive: true });
             }
 
-            WEEKLY_REPORT.loadData()
-                .then(function (df) {
-                    if (!df || df.length === 0) throw new Error('无数据');
-                    document.getElementById('loading').style.display = 'none';
-                    document.getElementById('main').style.display = 'block';
+            function renderCoachWeekly(latest) {
+                var text = latest['Coach Advice'] || latest['Coach advice'] || '';
+                var block = document.getElementById('coach-weekly-block');
+                var el = document.getElementById('coach-weekly-text');
+                if (text && text !== '暂无') {
+                    el.textContent = text;
+                    block.style.display = 'block';
+                } else {
+                    el.textContent = '本周暂无教练点评';
+                    block.style.display = 'block';
+                }
+            }
 
-                    var latest = df[0];
-                    var last4 = df.slice(1, 5);
-                    document.getElementById('subtitle').textContent = '本周概览 (' + fmtDate(latest['Week Start']) + ' ~ ' + fmtDate(latest['Week End']) + ')';
-                    document.getElementById('status-line').innerHTML = '当前状态: <strong>' + (latest.Status || '未知') + '</strong>';
+            function renderActivityAdvice(rows) {
+                var block = document.getElementById('activity-advice-block');
+                var list = document.getElementById('activity-advice-list');
+                if (!rows || rows.length === 0) {
+                    list.innerHTML = '<p class="metric-delta">暂无单次跑步点评。请在 Google 表格中发布 Activities 表为 CSV，并通过 <code>?activity_advice=URL</code> 或 <code>window.ACTIVITY_ADVICE_URL</code> 传入链接；确保 sync workflow 已运行 activity_advice.py。</p>';
+                    block.style.display = 'block';
+                    return;
+                }
+                var take = Math.min(rows.length, 20);
+                var html = '';
+                for (var i = 0; i < take; i++) {
+                    var r = rows[i];
+                    var dateStr = fmtDate(r['Date']) || r['Date_raw'] || '-';
+                    var name = (r['Name'] || '').toString();
+                    var dist = r['Distance (km)'] != null ? r['Distance (km)'] : '-';
+                    var pace = (r['Avg Pace'] || '-').toString();
+                    var advice = (r['Advice'] || '').toString();
+                    var stravaAdvice = (r['Strava Advice'] || '').toString();
+                    html += '<div class="run-advice-card">';
+                    html += '<div class="run-advice-summary">' + dateStr + ' · ' + name + ' · ' + dist + ' km · 配速 ' + pace + '</div>';
+                    if (advice) html += '<div class="run-advice-text">' + advice.replace(/\n/g, '<br>') + '</div>';
+                    if (stravaAdvice) html += '<div class="run-advice-strava">Strava: ' + stravaAdvice.replace(/\n/g, '<br>') + '</div>';
+                    html += '</div>';
+                }
+                list.innerHTML = html;
+                block.style.display = 'block';
+            }
 
-                    renderKpis(df, latest, last4);
-                    renderCharts(df);
-                })
-                .catch(function (err) {
-                    document.getElementById('loading').style.display = 'none';
-                    var el = document.getElementById('error');
-                    el.style.display = 'block';
-                    el.textContent = '加载失败: ' + err.message + '。若为 CORS，可设置 ?data= 为同源 JSON 或使用代理。';
-                });
+            Promise.all([
+                WEEKLY_REPORT.loadData(),
+                WEEKLY_REPORT.loadActivityAdvice()
+            ]).then(function (results) {
+                var df = results[0];
+                var activityAdviceRows = results[1] || [];
+                if (!df || df.length === 0) throw new Error('无数据');
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('main').style.display = 'block';
+
+                var latest = df[0];
+                var last4 = df.slice(1, 5);
+                document.getElementById('subtitle').textContent = '本周概览 (' + fmtDate(latest['Week Start']) + ' ~ ' + fmtDate(latest['Week End']) + ')';
+                document.getElementById('status-line').innerHTML = '当前状态: <strong>' + (latest.Status || '未知') + '</strong>';
+
+                renderKpis(df, latest, last4);
+                renderCoachWeekly(latest);
+                renderCharts(df);
+                renderActivityAdvice(activityAdviceRows);
+            })
+            .catch(function (err) {
+                document.getElementById('loading').style.display = 'none';
+                var el = document.getElementById('error');
+                el.style.display = 'block';
+                el.textContent = '加载失败: ' + err.message + '。若为 CORS，可设置 ?data= 为同源 JSON 或使用代理。';
+            });
         })();
     </script>
 </body>

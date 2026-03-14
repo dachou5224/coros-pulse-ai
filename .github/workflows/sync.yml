@@ -1,13 +1,13 @@
-name: Coros Data Sync
+name: Coros Data Sync + Activity Advice
 
 on:
   schedule:
-    # ⏱️ 修改这里：*/15 表示每 15 分钟运行一次
-    - cron: '*/15 * * * *'
-  workflow_dispatch:      # 允许手动点按钮运行
+    # 每日 10:00 北京时间 (02:00 UTC)
+    - cron: '0 2 * * *'
+  workflow_dispatch:
 
 jobs:
-  sync:
+  sync_and_advice:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
@@ -20,6 +20,7 @@ jobs:
 
     - name: Install dependencies
       run: |
+        python -m pip install --upgrade pip
         pip install -r requirements.txt
 
     - name: Run Sync Script
@@ -29,3 +30,13 @@ jobs:
         STRAVA_REFRESH_TOKEN: ${{ secrets.STRAVA_REFRESH_TOKEN }}
         GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_JSON_KEY }}
       run: python src/main.py
+
+    - name: Run Activity Advice Script
+      env:
+        STRAVA_CLIENT_ID: ${{ secrets.STRAVA_CLIENT_ID }}
+        STRAVA_CLIENT_SECRET: ${{ secrets.STRAVA_CLIENT_SECRET }}
+        STRAVA_REFRESH_TOKEN: ${{ secrets.STRAVA_REFRESH_TOKEN }}
+        GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_JSON_KEY }}
+        API_KEY: ${{ secrets.API_KEY }}
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      run: python src/activity_advice.py
