@@ -4,6 +4,7 @@
 """
 import os
 import time
+import unicodedata
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -19,9 +20,17 @@ except ImportError:
 _ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(_ROOT / ".env")
 
-API_KEY = (os.getenv("API_KEY") or os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY") or "").strip()
-BASE_URL = (os.getenv("BASE_URL") or "https://generativelanguage.googleapis.com/v1beta/openai").strip()
-MODEL = (os.getenv("COACH_MODEL") or os.getenv("MODEL_NAME") or "gemini-2.0-flash").strip()
+_RAW_API_KEY = (os.getenv("API_KEY") or os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY") or "").strip()
+# 仅保留 ASCII：密钥中若混入全角/不可见字符，会导致 httpx 在编码请求头或 URL 时触发 ascii 错误
+API_KEY = "".join(c for c in _RAW_API_KEY if ord(c) < 128).strip()
+_RAW_BASE_URL = (os.getenv("BASE_URL") or "").strip()
+BASE_URL = (
+    "".join(c for c in _RAW_BASE_URL if ord(c) < 128).strip()
+    if _RAW_BASE_URL
+    else ""
+) or "https://generativelanguage.googleapis.com/v1beta/openai"
+_RAW_MODEL = (os.getenv("COACH_MODEL") or os.getenv("MODEL_NAME") or "gemini-2.0-flash").strip()
+MODEL = "".join(c for c in _RAW_MODEL if ord(c) < 128).strip() or "gemini-2.0-flash"
 LLM_DELAY_SECONDS = float((os.getenv("LLM_DELAY_SECONDS") or "").strip() or "0")
 
 RUNNER_GENDER = os.getenv("RUNNER_GENDER", "").strip()
@@ -57,9 +66,14 @@ _FW_PUNCT = str.maketrans(
 
 
 def _normalize_llm_text(s: str) -> str:
+    """
+    NFKC 将全角标点/兼容字符转为常规形式（如 U+FF08 → '('），再补全角标点表。
+    解决 CI 上 httpx 对 URL/请求部分使用 ascii 编码时的 UnicodeEncodeError。
+    """
     if not s:
         return s
-    return s.translate(_FW_PUNCT)
+    t = unicodedata.normalize("NFKC", s)
+    return t.translate(_FW_PUNCT)
 
 
 def _normalize_base_url(url: str) -> str:
@@ -116,6 +130,9 @@ def _call_llm(system: str, user: str, max_tokens: int = 600) -> str:
             resp = client.chat.completions.create(**kwargs)
             raw = (resp.choices[0].message.content or "").strip()
             return raw if raw else ""
+        except UnicodeEncodeError as e:
+            print(f"⚠️ 教练点评 LLM 请求编码失败（UnicodeEncodeError）: {e}")
+            return ""
         except Exception as e:
             err_msg = str(e).lower()
             if "429" in err_msg or "rate" in err_msg or "quota" in err_msg:

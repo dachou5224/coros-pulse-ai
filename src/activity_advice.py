@@ -275,6 +275,10 @@ def main():
         if not any(slots.get(t) for t in ADVICE_SLOTS) and advice_text:
             slots["总评"] = advice_text[:50000]
 
+        if not any((slots.get(t) or "").strip() for t in ADVICE_SLOTS):
+            print(f"  ⏭ 跳过 Activity {aid}：LLM 无有效输出，不覆盖表格")
+            continue
+
         sheet_row = id_to_row.get(aid)
         if sheet_row is None:
             print(f"⚠️ 表格 A 列未找到 Activity ID={aid}，跳过写入（请检查 ID 是否与主表一致）")
