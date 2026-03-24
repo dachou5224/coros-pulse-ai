@@ -1,6 +1,7 @@
 """
 单次跑步教练点评：独立脚本，对最近 N 条尚未有点评的活动生成 AI 点评，
-解析五段（总评、配速、心率、步频与爬升、下次训练课）分五列写入 Activities sheet1 右侧。
+解析五段（总评、配速、心率、步频与爬升、下次训练课）写入 sheet1；
+并写入「点评更新时间(UTC)」列，便于与历史点评区分。
 可单独运行，便于接入 GitHub Actions workflow。
 """
 import re
@@ -8,6 +9,7 @@ import os
 import json
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -32,6 +34,9 @@ JSON_KEY = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
 SHEET_NAME = "Coros_Running_Data"
 
 ADVICE_SLOTS = ["总评", "配速", "心率", "步频与爬升", "下次训练课"]
+# 每次成功写入点评时更新，便于与历史点评区分（旧行无时间或时间为更早）
+META_COL = "点评更新时间(UTC)"
+ALL_ADVICE_HEADERS = ADVICE_SLOTS + [META_COL]
 
 # #region agent log
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -90,13 +95,18 @@ def _retry_gspread_write(fn, *, max_attempts=6):
             raise
 
 
-def _write_advice_slots_batch(worksheet, row_num: int, col_indices: dict, slots: dict) -> None:
-    """单行五列合并为一次 values_batchUpdate，降低 Write requests 配额消耗。"""
+def _write_advice_slots_batch(
+    worksheet, row_num: int, col_indices: dict, slots: dict, *, utc_stamp: str
+) -> None:
+    """单行五段点评 + 可选时间戳列，一次 values_batchUpdate。"""
     data = []
     for tag in ADVICE_SLOTS:
         col = col_indices[tag]
         r = rowcol_to_a1(row_num, col)
         data.append({"range": r, "values": [[slots.get(tag, "")]]})
+    if META_COL in col_indices:
+        mc = col_indices[META_COL]
+        data.append({"range": rowcol_to_a1(row_num, mc), "values": [[utc_stamp]]})
 
     def _do():
         return worksheet.batch_update(data)
@@ -205,17 +215,21 @@ def main():
     except gspread.WorksheetNotFound:
         pass
 
-    # 准备五列表头
+    # 准备点评列 + 时间戳列表头（时间列在点评列右侧）
     headers = activities_ws.row_values(1)
     col_indices = {}
     next_col = len(headers) + 1
-    for tag in ADVICE_SLOTS:
+    for tag in ALL_ADVICE_HEADERS:
         if tag in headers:
             col_indices[tag] = headers.index(tag) + 1
         else:
             activities_ws.update_cell(1, next_col, tag)
             col_indices[tag] = next_col
             next_col += 1
+    print(
+        f"📌 表头已就绪：点评列 {len(ADVICE_SLOTS)} 个；"
+        f"「{META_COL}」列用于标记本次写入时间，便于与旧点评区分。"
+    )
 
     # 去重：已有「总评」的跳过
     all_values = activities_ws.get_all_values()
@@ -274,9 +288,20 @@ def main():
             _agent_dbg("row A1 mismatch", "H6", {"sheet_row": sheet_row})
             continue
         try:
-            _write_advice_slots_batch(activities_ws, sheet_row, col_indices, slots)
+            utc_stamp_cell = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+            _write_advice_slots_batch(
+                activities_ws, sheet_row, col_indices, slots, utc_stamp=utc_stamp_cell
+            )
             existing_ids.add(aid)
             appended += 1
+            preview = (slots.get("总评") or "").replace("\n", " ").strip()
+            if len(preview) > 80:
+                preview = preview[:80] + "…"
+            log_extra = ""
+            if os.getenv("GITHUB_RUN_ID"):
+                log_extra = f" | GitHub run {os.getenv('GITHUB_RUN_ID')}"
+            print(f"  ✓ 行 {sheet_row} | Activity ID={aid} | {META_COL}: {utc_stamp_cell}{log_extra}")
+            print(f"      总评预览: {preview or '(空)'}")
         except APIError as e:
             print(f"⚠️ 写入活动 {aid} 失败: {e}")
             _agent_dbg("sheets APIError", "H5", {"error_type": type(e).__name__})
