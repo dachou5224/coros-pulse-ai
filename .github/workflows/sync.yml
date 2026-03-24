@@ -11,10 +11,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.9'
 
@@ -25,6 +25,8 @@ jobs:
 
     - name: Run Sync Script
       env:
+        LANG: C.UTF-8
+        LC_ALL: C.UTF-8
         STRAVA_CLIENT_ID: ${{ secrets.STRAVA_CLIENT_ID }}
         STRAVA_CLIENT_SECRET: ${{ secrets.STRAVA_CLIENT_SECRET }}
         STRAVA_REFRESH_TOKEN: ${{ secrets.STRAVA_REFRESH_TOKEN }}
@@ -33,6 +35,8 @@ jobs:
 
     - name: Run Activity Advice Script
       env:
+        LANG: C.UTF-8
+        LC_ALL: C.UTF-8
         STRAVA_CLIENT_ID: ${{ secrets.STRAVA_CLIENT_ID }}
         STRAVA_CLIENT_SECRET: ${{ secrets.STRAVA_CLIENT_SECRET }}
         STRAVA_REFRESH_TOKEN: ${{ secrets.STRAVA_REFRESH_TOKEN }}

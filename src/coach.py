@@ -42,6 +42,25 @@ RUNNER_PROFILE = {
 ENABLE_CARD_RENDER = os.getenv("ENABLE_CARD_RENDER", "false").strip().lower() == "true"
 CARD_BRAND_TAG = os.getenv("CARD_BRAND_TAG", "#AI跑步教练 #马拉松备战").strip()
 
+# 全角标点 → 半角：避免在部分 Linux/CI 环境下 httpx 构建请求时出现 ascii 编码错误（如 \uff08）
+_FW_PUNCT = str.maketrans(
+    {
+        "\uff08": "(",
+        "\uff09": ")",
+        "\uff0c": ",",
+        "\uff1a": ":",
+        "\uff1b": ";",
+        "\uff01": "!",
+        "\uff1f": "?",
+    }
+)
+
+
+def _normalize_llm_text(s: str) -> str:
+    if not s:
+        return s
+    return s.translate(_FW_PUNCT)
+
 
 def _normalize_base_url(url: str) -> str:
     """统一去掉末尾斜线，避免与 SDK 拼接后出现双斜线导致 404。"""
@@ -52,12 +71,27 @@ def _is_gemini() -> bool:
     return "generativelanguage.googleapis.com" in (BASE_URL or "").lower() or "gemini" in (MODEL or "").lower()
 
 
+def _model_for_request() -> str:
+    """模型名仅使用 ASCII，避免 httpx 在拼接 URL 时 raw_path.encode('ascii') 失败。"""
+    try:
+        MODEL.encode("ascii")
+        return MODEL
+    except UnicodeEncodeError:
+        return "".join(c for c in MODEL if ord(c) < 128).strip() or "gemini-2.0-flash"
+
+
 def _get_client():
     """返回 OpenAI 兼容客户端；未配置 API_KEY 时返回 None。"""
     if not API_KEY:
         return None
     base_url = _normalize_base_url(BASE_URL) or None
-    return OpenAI(api_key=API_KEY, base_url=base_url)
+    base_safe = base_url
+    if base_url:
+        try:
+            base_url.encode("ascii")
+        except UnicodeEncodeError:
+            base_safe = "".join(c for c in base_url if ord(c) < 128).strip() or "https://generativelanguage.googleapis.com/v1beta/openai"
+    return OpenAI(api_key=API_KEY, base_url=base_safe)
 
 
 def _call_llm(system: str, user: str, max_tokens: int = 600) -> str:
@@ -68,10 +102,10 @@ def _call_llm(system: str, user: str, max_tokens: int = 600) -> str:
     if not client:
         return ""
     kwargs = {
-        "model": MODEL,
+        "model": _model_for_request(),
         "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
+            {"role": "system", "content": _normalize_llm_text(system)},
+            {"role": "user", "content": _normalize_llm_text(user)},
         ],
         "temperature": 0.3,
         "max_tokens": max_tokens,

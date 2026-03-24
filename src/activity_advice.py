@@ -7,10 +7,13 @@ import re
 import os
 import json
 import sys
+import time
 from pathlib import Path
 
 import pandas as pd
 import gspread
+from gspread.exceptions import APIError
+from gspread.utils import rowcol_to_a1
 from oauth2client.service_account import ServiceAccountCredentials
 
 # 确保可导入 coach
@@ -30,6 +33,33 @@ SHEET_NAME = "Coros_Running_Data"
 
 ADVICE_SLOTS = ["总评", "配速", "心率", "步频与爬升", "下次训练课"]
 
+# #region agent log
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+_AGENT_LOG = os.environ.get(
+    "DEBUG_NDJSON_LOG",
+    str(_REPO_ROOT.parent / ".cursor" / "debug-deb334.log"),
+)
+
+
+def _agent_dbg(message: str, hypothesis_id: str, data=None):
+    """调试会话 deb334：写入 NDJSON，不含密钥/PII。"""
+    try:
+        payload = {
+            "sessionId": "deb334",
+            "location": "activity_advice.py",
+            "message": message,
+            "hypothesisId": hypothesis_id,
+            "data": data or {},
+            "timestamp": int(time.time() * 1000),
+        }
+        with open(_AGENT_LOG, "a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
+# #endregion
+
 
 def get_client():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -45,6 +75,35 @@ def get_client():
         return None
 
 
+def _retry_gspread_write(fn, *, max_attempts=6):
+    """Sheets 写限流 (429) 时指数退避重试。"""
+    for attempt in range(max_attempts):
+        try:
+            return fn()
+        except APIError as e:
+            err = str(e)
+            if "429" in err and attempt < max_attempts - 1:
+                wait = min(60, 2**attempt)
+                print(f"⏳ Sheets API 限流 (429)，{wait}s 后重试 ({attempt + 1}/{max_attempts})...")
+                time.sleep(wait)
+                continue
+            raise
+
+
+def _write_advice_slots_batch(worksheet, row_num: int, col_indices: dict, slots: dict) -> None:
+    """单行五列合并为一次 values_batchUpdate，降低 Write requests 配额消耗。"""
+    data = []
+    for tag in ADVICE_SLOTS:
+        col = col_indices[tag]
+        r = rowcol_to_a1(row_num, col)
+        data.append({"range": r, "values": [[slots.get(tag, "")]]})
+
+    def _do():
+        return worksheet.batch_update(data)
+
+    _retry_gspread_write(_do)
+
+
 def _parse_advice_slots(raw: str) -> dict:
     """从 coach 输出中按【标签】提取五段。"""
     slots = {}
@@ -56,18 +115,22 @@ def _parse_advice_slots(raw: str) -> dict:
 
 def main():
     print("🚀 开始执行单次跑步教练点评...")
+    _agent_dbg("activity_advice main 开始", "H0", {"argv0": sys.argv[0] if sys.argv else ""})
     if not get_activity_advice:
         print("❌ 无法导入 coach.get_activity_advice")
+        _agent_dbg("coach 导入失败", "H1", {})
         return 1
 
     client = get_client()
     if not client:
+        _agent_dbg("get_client 失败", "H2", {"has_json_key": bool(JSON_KEY and str(JSON_KEY).strip())})
         return 1
 
     try:
         sh = client.open(SHEET_NAME)
     except Exception as e:
         print(f"❌ 找不到表格 '{SHEET_NAME}': {e}")
+        _agent_dbg("打开表格失败", "H3", {"error_type": type(e).__name__})
         return 1
 
     # 读取 Activities
@@ -75,6 +138,7 @@ def main():
     df = pd.DataFrame(activities_ws.get_all_records())
     if df.empty:
         print("❌ Activities 表无数据")
+        _agent_dbg("Activities 空表", "H4", {"row_count_hint": activities_ws.row_count})
         return 1
     if "Activity ID" in df.columns:
         df["Activity ID"] = df["Activity ID"].astype(str)
@@ -150,21 +214,23 @@ def main():
         if not any(slots.get(t) for t in ADVICE_SLOTS) and advice_text:
             slots["总评"] = advice_text[:50000]
 
+        cell = activities_ws.find(str(aid), in_column=1)
+        if cell is None:
+            continue
         try:
-            cell = activities_ws.find(str(aid), in_column=1)
-            for tag in ADVICE_SLOTS:
-                col = col_indices[tag]
-                activities_ws.update_cell(cell.row, col, slots.get(tag, ""))
+            _write_advice_slots_batch(activities_ws, cell.row, col_indices, slots)
             existing_ids.add(aid)
             appended += 1
-        except gspread.exceptions.CellNotFound:
-            pass
+        except APIError as e:
+            print(f"⚠️ 写入活动 {aid} 失败: {e}")
+            _agent_dbg("sheets APIError", "H5", {"error_type": type(e).__name__})
 
     if appended > 0:
         print(f"✅ 单次跑步教练点评已写入 {appended} 条")
     else:
         print("✅ 无新活动需点评")
 
+    _agent_dbg("activity_advice 正常结束", "H0", {"appended": appended})
     return 0
 
 
