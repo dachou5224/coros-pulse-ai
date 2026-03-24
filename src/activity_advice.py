@@ -104,6 +104,50 @@ def _write_advice_slots_batch(worksheet, row_num: int, col_indices: dict, slots:
     _retry_gspread_write(_do)
 
 
+def _normalize_activity_id(val) -> str:
+    """
+    与 main.clean_id 一致：统一 int/float/str 形式的 Strava ID，
+    保证 DataFrame 与表格 A 列匹配到同一行。
+    """
+    if val is None:
+        return ""
+    try:
+        if isinstance(val, float) and pd.isna(val):
+            return ""
+    except Exception:
+        pass
+    try:
+        return str(int(float(val)))
+    except Exception:
+        s = str(val).strip()
+        return s
+
+
+def _build_activity_id_to_row(all_values: list) -> dict:
+    """
+    从 sheet 原始行构建「规范化 Activity ID -> 1-based 行号」。
+    同一 ID 多行时保留最后一次出现的行（通常对应最新排序下的有效行）。
+    """
+    id_to_row: dict[str, int] = {}
+    duplicates: list[tuple[str, int, int]] = []
+    for row_num, row in enumerate(all_values[1:], start=2):
+        if not row:
+            continue
+        raw = row[0]
+        aid = _normalize_activity_id(raw)
+        if not aid:
+            continue
+        if aid in id_to_row:
+            duplicates.append((aid, id_to_row[aid], row_num))
+        id_to_row[aid] = row_num
+    if duplicates:
+        for aid, r_old, r_new in duplicates[:5]:
+            print(f"⚠️ Activity ID 在表格中重复: {aid}（先前第 {r_old} 行，现用第 {r_new} 行）")
+        if len(duplicates) > 5:
+            print(f"⚠️ … 另有 {len(duplicates) - 5} 组重复 ID，均已以后出现行为准")
+    return id_to_row
+
+
 def _parse_advice_slots(raw: str) -> dict:
     """从 coach 输出中按【标签】提取五段。"""
     slots = {}
@@ -141,7 +185,7 @@ def main():
         _agent_dbg("Activities 空表", "H4", {"row_count_hint": activities_ws.row_count})
         return 1
     if "Activity ID" in df.columns:
-        df["Activity ID"] = df["Activity ID"].astype(str)
+        df["Activity ID"] = df["Activity ID"].map(_normalize_activity_id)
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
     df = df.sort_values("Date")
 
@@ -182,9 +226,12 @@ def main():
             if len(row) >= col_zongping:
                 val = row[col_zongping - 1]
                 if val and str(val).strip():
-                    aid = row[0] if row else ""
+                    aid = _normalize_activity_id(row[0] if row else "")
                     if aid:
-                        existing_ids.add(str(aid).strip())
+                        existing_ids.add(aid)
+
+    # A 列规范化 ID -> 行号，避免 find() 与 12345 / 12345.0 不一致导致写错行或找不到
+    id_to_row = _build_activity_id_to_row(all_values)
 
     # 最近 limit 条，按日期倒序处理
     limit = 20
@@ -194,7 +241,7 @@ def main():
 
     for idx in range(len(recent) - 1, -1, -1):
         row = recent.iloc[idx]
-        aid = str(row.get("Activity ID", "")).strip()
+        aid = _normalize_activity_id(row.get("Activity ID", ""))
         if not aid or aid in existing_ids:
             continue
 
@@ -214,11 +261,20 @@ def main():
         if not any(slots.get(t) for t in ADVICE_SLOTS) and advice_text:
             slots["总评"] = advice_text[:50000]
 
-        cell = activities_ws.find(str(aid), in_column=1)
-        if cell is None:
+        sheet_row = id_to_row.get(aid)
+        if sheet_row is None:
+            print(f"⚠️ 表格 A 列未找到 Activity ID={aid}，跳过写入（请检查 ID 是否与主表一致）")
+            _agent_dbg("sheet row missing for id", "H6", {"aid_len": len(aid)})
+            continue
+        # 写入前用缓存的 all_values 再确认该行 A 列与 aid 一致（避免额外 API，且与映射同源）
+        row_vals = all_values[sheet_row - 1] if 1 <= sheet_row <= len(all_values) else []
+        a_raw = row_vals[0] if row_vals else ""
+        if _normalize_activity_id(a_raw) != aid:
+            print(f"⚠️ 行 {sheet_row} A 列与 Activity ID={aid} 不一致（当前 A 列: {a_raw!r}），跳过写入")
+            _agent_dbg("row A1 mismatch", "H6", {"sheet_row": sheet_row})
             continue
         try:
-            _write_advice_slots_batch(activities_ws, cell.row, col_indices, slots)
+            _write_advice_slots_batch(activities_ws, sheet_row, col_indices, slots)
             existing_ids.add(aid)
             appended += 1
         except APIError as e:
