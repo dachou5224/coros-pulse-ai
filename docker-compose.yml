@@ -1,0 +1,45 @@
+# 与 chem_portal 相同：在仓库根目录执行 docker compose up -d --build
+#
+# 默认仅启动 coros-show（公开 CSV，无需 secrets）。
+# Pulse（gspread + Streamlit Secrets）需先在主机放置 .streamlit/secrets.toml，再执行：
+#   docker compose --profile pulse up -d --build
+#
+# 主机端口 8512 → 周报展示；8511 → Pulse（避免与同机 chem_portal 8501 冲突）
+
+services:
+  coros-show:
+    build: .
+    container_name: coros_pulse_show
+    ports:
+      - "8512:8501"
+    command:
+      - streamlit
+      - run
+      - show/app.py
+      - --server.port=8501
+      - --server.address=0.0.0.0
+      - --browser.gatherUsageStats=false
+    restart: unless-stopped
+    environment:
+      WEEKLY_REPORT_CSV_URL: ${WEEKLY_REPORT_CSV_URL:-}
+      WEEKLY_REPORT_CSV_CACHE_TTL_SEC: ${WEEKLY_REPORT_CSV_CACHE_TTL_SEC:-}
+
+  coros-pulse:
+    profiles:
+      - pulse
+    build: .
+    container_name: coros_pulse
+    ports:
+      - "8511:8501"
+    command:
+      - streamlit
+      - run
+      - src/app.py
+      - --server.port=8501
+      - --server.address=0.0.0.0
+      - --browser.gatherUsageStats=false
+    restart: unless-stopped
+    environment:
+      PULSE_WEEKLY_CACHE_TTL_SEC: ${PULSE_WEEKLY_CACHE_TTL_SEC:-}
+    volumes:
+      - ./.streamlit/secrets.toml:/app/.streamlit/secrets.toml:ro

@@ -1,0 +1,10 @@
+# Docker / Streamlit 运行时使用（不含 playwright/html2image，加快镜像构建）
+stravalib
+gspread
+oauth2client
+pandas
+python-dotenv
+numpy
+streamlit
+plotly
+openai

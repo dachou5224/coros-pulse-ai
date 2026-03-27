@@ -1,0 +1,86 @@
+# 与 chem_portal/.github/workflows/deploy.yml 对齐：push main → SSH 到 VPS → git pull → docker compose
+#
+# 仓库 Settings → Secrets and variables → Actions：
+#   VPS_HOST  VPS 公网 IP 或域名（必填）
+#   VPS_USER  SSH 用户名
+#   VPS_KEY   SSH 私钥全文（PEM，含 BEGIN/END 行；勿在 bash 中 echo 展开）
+#
+# VPS 约定：仓库目录 /root/coros-pulse-ai（= DEPLOY_ROOT/COROS_REPO_DIR，默认即此路径）。
+# 静态首页（show/static）同步目标默认 /var/www/run-home（Nginx root 指向此处）。
+#
+# 可选环境变量（写在 VPS 的 ~/.bashrc、profile 或 ssh forced command 前的 systemd Environment）：
+#   DEPLOY_ROOT              默认 /root
+#   COROS_REPO_DIR           默认 coros-pulse-ai
+#   COROS_STATIC_WEB_ROOT    默认 /var/www/run-home（设为其他路径可覆盖）
+#   COMPOSE_PROFILES         设 pulse 时同时起 Pulse Streamlit
+
+name: Deploy coros-pulse-ai to VPS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "show/**"
+      - "Dockerfile"
+      - "docker-compose.yml"
+      - "requirements-docker.txt"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check VPS_HOST / VPS_USER secrets
+        run: |
+          if [ -z "${{ secrets.VPS_HOST }}" ]; then
+            echo "::error::VPS_HOST 未配置。请到 Settings → Secrets and variables → Actions 添加 VPS_HOST"
+            exit 1
+          fi
+          if [ -z "${{ secrets.VPS_USER }}" ]; then
+            echo "::error::VPS_USER 未配置。请添加 VPS_USER"
+            exit 1
+          fi
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_KEY }}
+          port: 22
+          script: |
+            set -e
+            DEPLOY_ROOT="${DEPLOY_ROOT:-/root}"
+            COROS_REPO_DIR="${COROS_REPO_DIR:-coros-pulse-ai}"
+            echo "📦 Deploy coros-pulse-ai @ $DEPLOY_ROOT/$COROS_REPO_DIR"
+            cd "$DEPLOY_ROOT"
+            if [ ! -d "$COROS_REPO_DIR/.git" ]; then
+              echo "::error::未找到 $DEPLOY_ROOT/$COROS_REPO_DIR 的 git 仓库。请先在 VPS 上 clone 本仓库并设置 COROS_REPO_DIR"
+              exit 1
+            fi
+            cd "$COROS_REPO_DIR"
+            git fetch origin
+            git checkout main
+            git pull --ff-only origin main
+            export COMPOSE_PROFILES="${COMPOSE_PROFILES:-}"
+            if docker compose version >/dev/null 2>&1; then
+              docker compose up -d --build
+            elif command -v docker-compose >/dev/null 2>&1; then
+              docker-compose up -d --build
+            else
+              echo "::error::未找到 docker compose 或 docker-compose。请安装 docker-compose-plugin"
+              exit 1
+            fi
+            STATIC_ROOT="${COROS_STATIC_WEB_ROOT:-/var/www/run-home}"
+            if [ -d "show/static" ]; then
+              mkdir -p "$STATIC_ROOT"
+              rsync -a --delete show/static/ "$STATIC_ROOT/"
+              echo "📄 静态首页已同步至 $STATIC_ROOT（供 Nginx root 使用）"
+            fi
+            echo "✅ coros-pulse-ai 部署完成（仓库: $DEPLOY_ROOT/$COROS_REPO_DIR；coros-show :8512）"
+            echo "   若需同时启动 Pulse：COMPOSE_PROFILES=pulse + .streamlit/secrets.toml（:8511）"
