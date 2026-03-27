@@ -114,6 +114,19 @@ def clean_id(val):
     """与 activity_advice 共用 normalize_activity_id，避免大整数经 float 丢精度或列错位。"""
     return normalize_activity_id(val)
 
+
+def _sheet_cell(val):
+    """gspread 写行时会 JSON 序列化；stravalib 的 ActivityType 等需压成 str/int/float。"""
+    if val is None:
+        return ""
+    if isinstance(val, (str, int, float, bool)):
+        return val
+    root = getattr(val, "__root__", None)
+    if root is not None:
+        return str(root)
+    return str(val)
+
+
 def process_activity_detail(activity_id, client):
     try:
         detail = client.get_activity(activity_id)
@@ -140,7 +153,7 @@ def process_activity_detail(activity_id, client):
         return [
             str(detail.id), # 写入时确保是字符串
             detail.start_date_local.strftime("%Y-%m-%d %H:%M:%S"),
-            detail.name,
+            _sheet_cell(detail.name),
             dist_km,
             duration_min,
             avg_pace,
@@ -153,9 +166,9 @@ def process_activity_detail(activity_id, client):
             float(detail.total_elevation_gain),
             detail.kilojoules if hasattr(detail, 'kilojoules') else 0,
             detail.average_temp if hasattr(detail, 'average_temp') else "",
-            shoe_name,
-            detail.type,
-            splits_json
+            _sheet_cell(shoe_name),
+            _sheet_cell(detail.type),
+            splits_json,
         ]
     except Exception as e:
         print(f"处理 ID {activity_id} 失败: {e}")
