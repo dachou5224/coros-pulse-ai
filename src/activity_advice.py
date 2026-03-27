@@ -30,6 +30,8 @@ try:
 except ImportError:
     get_activity_advice = None
 
+from id_utils import activity_id_column_index, normalize_activity_id
+
 JSON_KEY = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
 SHEET_NAME = "Coros_Running_Data"
 
@@ -37,6 +39,8 @@ ADVICE_SLOTS = ["总评", "配速", "心率", "步频与爬升", "下次训练�
 # 每次成功写入点评时更新，便于与历史点评区分（旧行无时间或时间为更早）
 META_COL = "点评更新时间(UTC)"
 ALL_ADVICE_HEADERS = ADVICE_SLOTS + [META_COL]
+# 连续请求 Gemini 间隔（秒），减轻 Connection error；环境变量设为 0 可关闭
+_ADVICE_LOOP_DELAY = float(os.getenv("ACTIVITY_ADVICE_DELAY_SECONDS") or "1.25")
 
 # #region agent log
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -114,37 +118,19 @@ def _write_advice_slots_batch(
     _retry_gspread_write(_do)
 
 
-def _normalize_activity_id(val) -> str:
-    """
-    与 main.clean_id 一致：统一 int/float/str 形式的 Strava ID，
-    保证 DataFrame 与表格 A 列匹配到同一行。
-    """
-    if val is None:
-        return ""
-    try:
-        if isinstance(val, float) and pd.isna(val):
-            return ""
-    except Exception:
-        pass
-    try:
-        return str(int(float(val)))
-    except Exception:
-        s = str(val).strip()
-        return s
-
-
-def _build_activity_id_to_row(all_values: list) -> dict:
+def _build_activity_id_to_row(all_values: list, id_col_idx: int) -> dict:
     """
     从 sheet 原始行构建「规范化 Activity ID -> 1-based 行号」。
     同一 ID 多行时保留最后一次出现的行（通常对应最新排序下的有效行）。
+    id_col_idx：表头中「Activity ID」列的 0-based 索引（勿硬编码 A 列）。
     """
     id_to_row: dict[str, int] = {}
     duplicates: list[tuple[str, int, int]] = []
     for row_num, row in enumerate(all_values[1:], start=2):
         if not row:
             continue
-        raw = row[0]
-        aid = _normalize_activity_id(raw)
+        raw = row[id_col_idx] if len(row) > id_col_idx else ""
+        aid = normalize_activity_id(raw)
         if not aid:
             continue
         if aid in id_to_row:
@@ -195,7 +181,7 @@ def main():
         _agent_dbg("Activities 空表", "H4", {"row_count_hint": activities_ws.row_count})
         return 1
     if "Activity ID" in df.columns:
-        df["Activity ID"] = df["Activity ID"].map(_normalize_activity_id)
+        df["Activity ID"] = df["Activity ID"].map(normalize_activity_id)
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
     df = df.sort_values("Date")
 
@@ -217,6 +203,12 @@ def main():
 
     # 准备点评列 + 时间戳列表头（时间列在点评列右侧）
     headers = activities_ws.row_values(1)
+    id_col_idx, id_hdr_ok = activity_id_column_index(headers)
+    if not id_hdr_ok:
+        print(
+            "⚠️ 表头第 1 行未找到「Activity ID」，已回退使用第 A 列做行映射；"
+            "若插入过列，请修正表头以免点评写入错位。"
+        )
     col_indices = {}
     next_col = len(headers) + 1
     for tag in ALL_ADVICE_HEADERS:
@@ -240,22 +232,23 @@ def main():
             if len(row) >= col_zongping:
                 val = row[col_zongping - 1]
                 if val and str(val).strip():
-                    aid = _normalize_activity_id(row[0] if row else "")
+                    cell_id = row[id_col_idx] if len(row) > id_col_idx else ""
+                    aid = normalize_activity_id(cell_id)
                     if aid:
                         existing_ids.add(aid)
 
-    # A 列规范化 ID -> 行号，避免 find() 与 12345 / 12345.0 不一致导致写错行或找不到
-    id_to_row = _build_activity_id_to_row(all_values)
+    # 按「Activity ID」列（非硬编码 A 列）建立 ID -> 行号
+    id_to_row = _build_activity_id_to_row(all_values, id_col_idx)
 
-    # 最近 limit 条，按日期倒序处理
-    limit = 20
+    # 最近 limit 条（默认 20；本地/调试可设 ACTIVITY_ADVICE_LIMIT=5）
+    limit = max(1, min(100, int(os.getenv("ACTIVITY_ADVICE_LIMIT", "20"))))
     recent = df.tail(limit)
     weekly_context = report_row_dict
     appended = 0
 
     for idx in range(len(recent) - 1, -1, -1):
         row = recent.iloc[idx]
-        aid = _normalize_activity_id(row.get("Activity ID", ""))
+        aid = normalize_activity_id(row.get("Activity ID", ""))
         if not aid or aid in existing_ids:
             continue
 
@@ -269,6 +262,9 @@ def main():
         except Exception as e:
             print(f"⚠️ 单条点评失败 Activity {aid}: {e}")
             advice_text = ""
+        finally:
+            if _ADVICE_LOOP_DELAY > 0:
+                time.sleep(_ADVICE_LOOP_DELAY)
 
         slots = _parse_advice_slots(advice_text)
         # 新 prompt 口语化输出无【标签】，解析为空时用 raw 写入总评
@@ -281,14 +277,17 @@ def main():
 
         sheet_row = id_to_row.get(aid)
         if sheet_row is None:
-            print(f"⚠️ 表格 A 列未找到 Activity ID={aid}，跳过写入（请检查 ID 是否与主表一致）")
+            print(f"⚠️ 表格「Activity ID」列未找到行 ID={aid}，跳过写入（请检查是否与 Sheet 中该列一致）")
             _agent_dbg("sheet row missing for id", "H6", {"aid_len": len(aid)})
             continue
         # 写入前用缓存的 all_values 再确认该行 A 列与 aid 一致（避免额外 API，且与映射同源）
         row_vals = all_values[sheet_row - 1] if 1 <= sheet_row <= len(all_values) else []
-        a_raw = row_vals[0] if row_vals else ""
-        if _normalize_activity_id(a_raw) != aid:
-            print(f"⚠️ 行 {sheet_row} A 列与 Activity ID={aid} 不一致（当前 A 列: {a_raw!r}），跳过写入")
+        id_raw = row_vals[id_col_idx] if len(row_vals) > id_col_idx else ""
+        if normalize_activity_id(id_raw) != aid:
+            col_letter = "A" if id_col_idx == 0 else f"列索引{id_col_idx}"
+            print(
+                f"⚠️ 行 {sheet_row} {col_letter}（Activity ID 列）与期望 ID={aid} 不一致（当前: {id_raw!r}），跳过写入"
+            )
             _agent_dbg("row A1 mismatch", "H6", {"sheet_row": sheet_row})
             continue
         try:

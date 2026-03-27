@@ -45,4 +45,7 @@ jobs:
         GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_JSON_KEY }}
         API_KEY: ${{ secrets.API_KEY }}
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        # LLM：连接失败/429 时退避重试；逐条点评间隔，减轻对 generativelanguage 的突发连接
+        LLM_MAX_ATTEMPTS: "6"
+        ACTIVITY_ADVICE_DELAY_SECONDS: "1.5"
       run: python src/activity_advice.py

@@ -5,6 +5,9 @@ import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from stravalib.client import Client
+from stravalib import exc as strava_exc
+
+from id_utils import normalize_activity_id
 
 # --- 配置部分 ---
 STRAVA_CLIENT_ID = os.getenv('STRAVA_CLIENT_ID')
@@ -62,24 +65,61 @@ def get_pace_str(speed_mps):
     pace_sec = int((pace_decimal - pace_min) * 60)
     return f"{pace_min}'{pace_sec:02d}\""
 
-def clean_id(val):
+
+def seconds_from_duration_like(val) -> float:
     """
-    🛠️ 关键修复：清洗 ID
-    不管是 12345 (int), '12345' (str), 还是 12345.0 (float)
-    统统转成纯字符串 '12345'
+    Strava 的 moving_time / elapsed_time 在 stravalib 中多为 timedelta 或整型秒数；
+    部分环境会解析成 google.protobuf.well_known_types.Duration（无 total_seconds）。
+    亦兼容 pint.Quantity（秒）。
     """
+    if val is None:
+        return 0.0
+    ts = getattr(val, "total_seconds", None)
+    if callable(ts):
+        return float(ts())
+    to_td = getattr(val, "ToTimedelta", None)
+    if callable(to_td):
+        try:
+            td = to_td()
+            if td is not None and hasattr(td, "total_seconds"):
+                return float(td.total_seconds())
+        except Exception:
+            pass
+    to_sec = getattr(val, "ToSeconds", None)
+    if callable(to_sec):
+        try:
+            return float(to_sec())
+        except Exception:
+            pass
+    if hasattr(val, "seconds") and hasattr(val, "nanos"):
+        try:
+            s = int(val.seconds)
+            n = int(getattr(val, "nanos", 0) or 0)
+            return s + n / 1e9
+        except (TypeError, ValueError):
+            pass
     try:
-        # 先转 float 处理 .0 的情况，再转 int 去掉小数，最后转 str
-        return str(int(float(val)))
-    except:
-        return str(val).strip()
+        import pint
+
+        if isinstance(val, pint.Quantity):
+            return float(val.to("second").magnitude)
+    except Exception:
+        pass
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return 0.0
+
+def clean_id(val):
+    """与 activity_advice 共用 normalize_activity_id，避免大整数经 float 丢精度或列错位。"""
+    return normalize_activity_id(val)
 
 def process_activity_detail(activity_id, client):
     try:
         detail = client.get_activity(activity_id)
         
         dist_km = round(float(detail.distance) / 1000, 2)
-        duration_min = round(detail.moving_time.total_seconds() / 60, 2)
+        duration_min = round(seconds_from_duration_like(detail.moving_time) / 60, 2)
         avg_pace = get_pace_str(detail.average_speed)
         max_pace = get_pace_str(detail.max_speed)
 
@@ -194,8 +234,41 @@ def main():
             except Exception as e:
                 print(f"排序失败 (可能是权限或表头问题，不影响数据): {e}")
 
+    except strava_exc.Fault as e:
+        _print_strava_http_error(e)
     except Exception as e:
         print(f"运行出错: {e}")
+        if getattr(e, "response", None) is not None:
+            _print_strava_http_error(e)
+
+
+def _print_strava_http_error(e: Exception) -> None:
+    """
+    Strava 官方常见码：401/403/404/429/5xx。若出现 597 等非标准码，多为中间层（代理/WAF/CDN）
+    或网络设备返回的非 RFC 状态行；[None] 表示响应体里无 Strava 标准 message/errors JSON。
+    「No rates present in response headers」来自 stravalib：错误页往往不带 X-RateLimit-*，可忽略。
+    """
+    print(f"运行出错: {e}")
+    resp = getattr(e, "response", None)
+    if resp is None:
+        print(
+            "  提示：若为 597 等异常码，请检查本机/VPS 是否经公司代理、防火墙或 CDN；"
+            "另查 https://status.strava.com 与换网络重试。"
+        )
+        return
+    print(f"  HTTP 状态码: {resp.status_code} | URL: {getattr(resp, 'url', '?')}")
+    try:
+        snippet = (resp.text or "").strip()[:500]
+        if snippet:
+            print(f"  响应正文片段: {snippet!r}")
+    except Exception:
+        pass
+    if resp.status_code and (resp.status_code < 200 or resp.status_code >= 500):
+        print(
+            "  建议：等待后重试；缩小 get_activities(limit)；确认 STRAVA_* 凭证有效；"
+            "用 curl -v 直连 api 排除代理劫持。"
+        )
+
 
 if __name__ == "__main__":
     main()

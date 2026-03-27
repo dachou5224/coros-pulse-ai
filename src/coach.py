@@ -11,6 +11,21 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 try:
+    import httpx
+
+    _OPENAI_TIMEOUT = httpx.Timeout(120.0, connect=45.0, read=120.0, write=45.0, pool=45.0)
+except Exception:
+    httpx = None  # type: ignore
+    _OPENAI_TIMEOUT = 120.0
+
+try:
+    from openai import APIConnectionError, APITimeoutError, RateLimitError
+
+    _OPENAI_TRANSIENT_EXC = (APIConnectionError, APITimeoutError, RateLimitError)
+except ImportError:
+    _OPENAI_TRANSIENT_EXC = ()
+
+try:
     from card_render import render_activity_card, render_weekly_card
     _CARD_RENDER_AVAILABLE = True
 except ImportError:
@@ -32,6 +47,7 @@ BASE_URL = (
 _RAW_MODEL = (os.getenv("COACH_MODEL") or os.getenv("MODEL_NAME") or "gemini-2.0-flash").strip()
 MODEL = "".join(c for c in _RAW_MODEL if ord(c) < 128).strip() or "gemini-2.0-flash"
 LLM_DELAY_SECONDS = float((os.getenv("LLM_DELAY_SECONDS") or "").strip() or "0")
+LLM_MAX_ATTEMPTS = max(1, min(12, int((os.getenv("LLM_MAX_ATTEMPTS") or "6").strip() or "6")))
 
 RUNNER_GENDER = os.getenv("RUNNER_GENDER", "").strip()
 RUNNER_AGE_RAW = os.getenv("RUNNER_AGE", "").strip()
@@ -85,6 +101,27 @@ def _is_gemini() -> bool:
     return "generativelanguage.googleapis.com" in (BASE_URL or "").lower() or "gemini" in (MODEL or "").lower()
 
 
+def _is_transient_llm_error(e: BaseException) -> bool:
+    """429 / 连接失败 / 超时 等可重试错误。"""
+    if _OPENAI_TRANSIENT_EXC and isinstance(e, _OPENAI_TRANSIENT_EXC):
+        return True
+    err_msg = str(e).lower()
+    if "429" in err_msg or "rate" in err_msg or "quota" in err_msg:
+        return True
+    if "connection error" in err_msg or "connection" in err_msg:
+        return True
+    if "timeout" in err_msg or "timed out" in err_msg:
+        return True
+    if "remote" in err_msg and ("closed" in err_msg or "reset" in err_msg):
+        return True
+    if "ssl" in err_msg or "tls" in err_msg:
+        return True
+    name = type(e).__name__.lower()
+    if "timeout" in name or "connect" in name:
+        return True
+    return False
+
+
 def _model_for_request() -> str:
     """模型名仅使用 ASCII，避免 httpx 在拼接 URL 时 raw_path.encode('ascii') 失败。"""
     try:
@@ -105,12 +142,18 @@ def _get_client():
             base_url.encode("ascii")
         except UnicodeEncodeError:
             base_safe = "".join(c for c in base_url if ord(c) < 128).strip() or "https://generativelanguage.googleapis.com/v1beta/openai"
-    return OpenAI(api_key=API_KEY, base_url=base_safe)
+    # max_retries=0：连接/429 由 _call_llm 统一退避，避免与 SDK 内置重试叠加
+    return OpenAI(
+        api_key=API_KEY,
+        base_url=base_safe,
+        max_retries=0,
+        timeout=_OPENAI_TIMEOUT,
+    )
 
 
 def _call_llm(system: str, user: str, max_tokens: int = 600) -> str:
     """
-    调用 LLM，返回纯文本。遇 429 重试一次；其他异常打 log 并返回空串。
+    调用 LLM，返回纯文本。对 429 / Connection error / 超时 等做指数退避重试。
     """
     client = _get_client()
     if not client:
@@ -125,7 +168,7 @@ def _call_llm(system: str, user: str, max_tokens: int = 600) -> str:
         "max_tokens": max_tokens,
         "timeout": 120,
     }
-    for attempt in range(2):
+    for attempt in range(LLM_MAX_ATTEMPTS):
         try:
             resp = client.chat.completions.create(**kwargs)
             raw = (resp.choices[0].message.content or "").strip()
@@ -134,11 +177,14 @@ def _call_llm(system: str, user: str, max_tokens: int = 600) -> str:
             print(f"⚠️ 教练点评 LLM 请求编码失败（UnicodeEncodeError）: {e}")
             return ""
         except Exception as e:
-            err_msg = str(e).lower()
-            if "429" in err_msg or "rate" in err_msg or "quota" in err_msg:
-                if attempt == 0:
-                    time.sleep(5)
-                    continue
+            if _is_transient_llm_error(e) and attempt < LLM_MAX_ATTEMPTS - 1:
+                wait = min(60, 2**attempt + (0.5 if attempt else 0.0))
+                print(
+                    f"⚠️ 教练点评 LLM 暂发性失败 [{type(e).__name__}] {e!s}，{wait:.1f}s 后重试 "
+                    f"({attempt + 1}/{LLM_MAX_ATTEMPTS})…"
+                )
+                time.sleep(wait)
+                continue
             print(f"⚠️ 教练点评 LLM 调用失败: {e}")
             return ""
     return ""

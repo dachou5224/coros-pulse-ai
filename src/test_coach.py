@@ -1,9 +1,13 @@
 """
-从 Google Sheet 拉取最近 1 条跑步记录和 1 条周报，测试 coach 模块的 get_weekly_advice 与 get_activity_advice。
+从 Google Sheet 拉取最近 N 条跑步（默认 5）与 1 条周报，测试 coach：get_activity_advice、get_weekly_advice。
 在项目根目录执行：python src/test_coach.py
+
 需配置 .env：API_KEY（Gemini）；Google Sheet 二选一：
-  - GOOGLE_APPLICATION_CREDENTIALS_FILE=credentials.json  （推荐，路径相对项目根或绝对路径）
+  - GOOGLE_APPLICATION_CREDENTIALS_FILE=credentials.json
   - GOOGLE_APPLICATION_CREDENTIALS_JSON= 整段 JSON 单行
+
+可选环境变量：
+  - TEST_RECENT_ACTIVITIES=5  从 Activities 表按 Date 排序后取最近几条（默认 5）
 """
 import json
 import os
@@ -29,6 +33,7 @@ if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
 from coach import get_weekly_advice, get_activity_advice
+from id_utils import normalize_activity_id
 
 SHEET_NAME = "Coros_Running_Data"
 
@@ -80,16 +85,27 @@ def main():
         print(f"❌ 打开表格失败: {e}")
         return 1
 
-    # 最近 5 条跑步记录（Activities sheet1）：按日期排序后取最新 5 条
+    # 最近 N 条跑步（Activities sheet1）：按 Date 升序后取尾部 N 条，与 activity_advice 逻辑一致
+    n_recent = max(1, min(50, int(os.getenv("TEST_RECENT_ACTIVITIES", "5"))))
     activities_ws = sh.sheet1
     activities_records = activities_ws.get_all_records()
     if not activities_records:
         print("❌ Activities 表无数据")
         return 1
     by_date = sorted(activities_records, key=lambda r: (r.get("Date") or ""))
-    recent_5 = by_date[-5:]
-    last_activity = by_date[-1]
-    print(f"✅ 最近 5 条跑步，目标: {last_activity.get('Date')} {last_activity.get('Name')} {last_activity.get('Distance (km)')} km")
+    recent_n = by_date[-n_recent:]
+    last_activity = recent_n[-1]
+    print(f"✅ 从 Sheet 拉取最近 {n_recent} 条跑步（按 Date 升序，下列最后一条为点评目标）\n")
+    for i, r in enumerate(recent_n, 1):
+        aid = normalize_activity_id(r.get("Activity ID"))
+        print(
+            f"  {i}. Activity ID={aid} | {r.get('Date')} | {r.get('Name')} | "
+            f"{r.get('Distance (km)')} km"
+        )
+    print(
+        f"\n🎯 本单点评目标: {last_activity.get('Date')} | {last_activity.get('Name')} | "
+        f"{last_activity.get('Distance (km)')} km"
+    )
 
     # 最近 1 条周报：按周排序后取最新一条
     try:
@@ -111,9 +127,11 @@ def main():
         "VDOT": last_report.get("VDOT"),
     }
 
-    # 测试 get_activity_advice（单条跑步点评，传入近期 5 次）
+    # 测试 get_activity_advice（最新 1 条 + 同期最近 N 次作为背景）
     print("\n--- 测试 get_activity_advice ---")
-    activity_advice = get_activity_advice(last_activity, recent_activities=recent_5, weekly_context=weekly_context)
+    activity_advice = get_activity_advice(
+        last_activity, recent_activities=recent_n, weekly_context=weekly_context
+    )
     if activity_advice:
         print(activity_advice)
     else:
