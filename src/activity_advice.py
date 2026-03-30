@@ -27,8 +27,10 @@ if str(ROOT / "src") not in sys.path:
 
 try:
     from coach import get_activity_advice
+    import coach as _coach
 except ImportError:
     get_activity_advice = None
+    _coach = None
 
 from id_utils import activity_id_column_index, normalize_activity_id
 
@@ -223,6 +225,18 @@ def main():
         f"「{META_COL}」列用于标记本次写入时间，便于与旧点评区分。"
     )
 
+    # LLM：无密钥时 coach 静默返回空串，易被误认为「脚本没跑」——此处明确提示（尤其 GitHub Actions）
+    _has_llm = bool(_coach and getattr(_coach, "API_KEY", "").strip())
+    if not _has_llm:
+        print(
+            "⚠️ LLM 未配置：环境变量中无 API_KEY / GEMINI_API_KEY / GOOGLE_API_KEY，"
+            "单次跑步点评不会生成。请在仓库 Settings → Secrets → Actions 中配置 API_KEY 或 GEMINI_API_KEY。"
+        )
+    else:
+        print(
+            f"🤖 LLM 已配置（模型 {_coach.MODEL}），将对「最近 N 条里尚未有总评」的活动请求点评。"
+        )
+
     # 去重：已有「总评」的跳过
     all_values = activities_ws.get_all_values()
     existing_ids = set()
@@ -245,6 +259,19 @@ def main():
     recent = df.tail(limit)
     weekly_context = report_row_dict
     appended = 0
+
+    pending_ids: list[str] = []
+    for _ix in range(len(recent)):
+        _aid = normalize_activity_id(recent.iloc[_ix].get("Activity ID", ""))
+        if _aid and _aid not in existing_ids:
+            pending_ids.append(_aid)
+    print(
+        f"📊 扫描范围：时间序最后 {limit} 条；其中「总评」为空、待尝试 LLM 的活动：{len(pending_ids)} 条。"
+    )
+    if pending_ids and len(pending_ids) <= 10:
+        print(f"   待处理 Activity ID: {', '.join(pending_ids)}")
+    elif pending_ids:
+        print(f"   待处理示例（前 5 个）: {', '.join(pending_ids[:5])} …")
 
     for idx in range(len(recent) - 1, -1, -1):
         row = recent.iloc[idx]
@@ -312,7 +339,15 @@ def main():
     if appended > 0:
         print(f"✅ 单次跑步教练点评已写入 {appended} 条")
     else:
-        print("✅ 无新活动需点评")
+        print("✅ 本次未写入新的单次点评（可能：均已有点评、无待处理活动、LLM 未配置或调用失败）")
+        if not _has_llm and pending_ids:
+            print(
+                "   原因提示：已发现待点评活动，但缺少 API_KEY / GEMINI_API_KEY，请配置 Secrets 后重跑 workflow。"
+            )
+        elif _has_llm and pending_ids:
+            print(
+                "   原因提示：有待处理 ID，但 LLM 返回为空或写入校验未通过；请向上翻看 ⚠️ 行。"
+            )
 
     _agent_dbg("activity_advice 正常结束", "H0", {"appended": appended})
     return 0
