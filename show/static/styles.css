@@ -113,6 +113,27 @@ details summary { cursor: pointer; font-weight: 600; }
     .layout-side { position: static; }
 }
 
+.chart-stack {
+    display: grid;
+    gap: 1rem;
+}
+
+.chart-panel {
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(203, 213, 225, 0.92);
+    border-radius: 14px;
+    padding: 14px 16px 8px;
+    box-shadow: 0 14px 36px rgba(148, 163, 184, 0.12);
+}
+
+.chart-panel h3 {
+    margin: 0 0 0.35rem;
+}
+
+.chart-panel .metric-delta {
+    margin-bottom: 0.35rem;
+}
+
 /* 本周教练点评 */
 .coach-advice-block { margin: 1rem 0; }
 .coach-advice-block h3 { margin-bottom: 0.5rem; }

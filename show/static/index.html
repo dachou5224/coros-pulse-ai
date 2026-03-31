@@ -37,27 +37,26 @@
         <hr>
         <div class="layout-grid">
             <div class="layout-main">
-                <div class="cols-2">
-                    <div>
+                <div class="chart-stack">
+                    <section class="chart-panel">
                         <h3>体能管理图表 (PMC)（最近 8 周）</h3>
                         <p class="metric-delta">蓝色柱=周负荷，紫色线=体能(CTL)</p>
                         <div id="chart-pmc" class="plotly-graph"></div>
-                    </div>
-                    <div>
+                    </section>
+                    <section class="chart-panel">
                         <h3>身体状态 (TSB) 分布（最近 8 周）</h3>
                         <p class="metric-delta">TSB &gt; 0 为恢复期，TSB &lt; -20 为疲劳风险区</p>
                         <div id="chart-tsb" class="plotly-graph"></div>
-                    </div>
-                </div>
-
-                <h3>效率与能力趋势（最近 8 周）</h3>
-                <div class="cols-2-equal">
-                    <div>
+                    </section>
+                    <section class="chart-panel">
+                        <h3>VDOT 趋势（最近 8 周）</h3>
                         <div id="chart-vdot" class="plotly-graph"></div>
-                    </div>
-                    <div>
+                    </section>
+                    <section class="chart-panel">
+                        <h3>LSD 有氧解耦（最近 8 周）</h3>
+                        <p class="metric-delta">红线为 5% 警戒线，越低越稳。</p>
                         <div id="chart-lsd" class="plotly-graph"></div>
-                    </div>
+                    </section>
                 </div>
 
                 <div class="summary-table-block">
@@ -179,6 +178,7 @@
                     yaxis2: { title: 'CTL', overlaying: 'y', side: 'right' },
                     hovermode: 'x unified',
                     legend: { orientation: 'h', y: 1.1 },
+                    height: 360,
                     margin: { t: 24 },
                     paper_bgcolor: 'rgba(255,255,255,0)', plot_bgcolor: 'rgba(255,255,255,0)',
                     font: { color: '#334155' }
@@ -194,6 +194,7 @@
                     { x: weekStart, y: tsb, type: 'bar', marker: { color: tsbColors } }
                 ], {
                     yaxis: { title: 'TSB' },
+                    height: 340,
                     shapes: [
                         { type: 'line', x0: x0, x1: x1, y0: 0, y1: 0, line: { color: '#94a3b8', dash: 'dash' } },
                         { type: 'line', x0: x0, x1: x1, y0: -20, y1: -20, line: { color: 'red', dash: 'dot' } }
@@ -205,14 +206,14 @@
 
                 Plotly.newPlot('chart-vdot', [
                     { x: weekStart, y: vdot, type: 'scatter', mode: 'lines+markers', name: 'VDOT', line: { color: '#db2777' } }
-                ], { title: 'VDOT (跑力) 趋势', margin: { t: 36 }, paper_bgcolor: 'rgba(255,255,255,0)', plot_bgcolor: 'rgba(255,255,255,0)', font: { color: '#334155' } }, { responsive: true });
+                ], { margin: { t: 16 }, height: 320, paper_bgcolor: 'rgba(255,255,255,0)', plot_bgcolor: 'rgba(255,255,255,0)', font: { color: '#334155' } }, { responsive: true });
 
                 Plotly.newPlot('chart-lsd', [
                     { x: weekStart, y: lsd, type: 'scatter', mode: 'lines+markers', fill: 'tozeroy', name: 'LSD Decouple', line: { color: '#2563eb' } }
                 ], {
-                    title: 'LSD 有氧解耦率 (越低越稳)',
                     shapes: [{ type: 'line', x0: x0, x1: x1, y0: 5, y1: 5, line: { color: 'red', dash: 'dash' }, annotation: { text: '5% 警戒线' } }],
-                    margin: { t: 36 },
+                    margin: { t: 16 },
+                    height: 320,
                     paper_bgcolor: 'rgba(255,255,255,0)', plot_bgcolor: 'rgba(255,255,255,0)',
                     font: { color: '#334155' }
                 }, { responsive: true });
