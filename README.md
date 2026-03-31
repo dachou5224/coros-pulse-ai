@@ -184,6 +184,8 @@ python scripts/export_static_data.py
 
 #### VPS 部署（静态首页 + Nginx）
 
+当前线上域名 `run.nice-ai.dev` 指向的是这里的静态首页（Nginx `root`），不是 `show/app.py` 的 Streamlit 服务；`show/app.py` 适合本地预览或通过 `:8512` 端口单独暴露。
+
 **路径约定（当前环境）**
 
 | 用途 | VPS 路径 |
