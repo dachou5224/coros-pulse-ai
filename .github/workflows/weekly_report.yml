@@ -9,6 +9,10 @@ on:
 jobs:
   analyze:
     runs-on: ubuntu-latest
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_KEY: ${{ secrets.VPS_KEY }}
     
     steps:
     - name: Checkout code
@@ -41,7 +45,7 @@ jobs:
       run: python scripts/export_static_data.py
 
     - name: Sync static data to VPS
-      if: ${{ secrets.VPS_HOST != '' && secrets.VPS_USER != '' && secrets.VPS_KEY != '' }}
+      if: ${{ env.VPS_HOST != '' && env.VPS_USER != '' && env.VPS_KEY != '' }}
       uses: appleboy/scp-action@v0.1.7
       with:
         host: ${{ secrets.VPS_HOST }}
