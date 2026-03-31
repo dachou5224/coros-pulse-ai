@@ -13,6 +13,8 @@
 #   COROS_REPO_DIR           默认 coros-pulse-ai
 #   COROS_STATIC_WEB_ROOT    默认 /var/www/run-home（设为其他路径可覆盖）
 #   COMPOSE_PROFILES         设 pulse 时同时起 Pulse Streamlit
+#   WEEKLY_REPORT_CSV_URL    coros-show 周报 CSV；不设则使用代码内默认公开链接
+#   ACTIVITY_ADVICE_CSV_URL  coros-show 单次活动点评 CSV；设定后新活动进入 Sheets 后页面会自动刷新
 
 name: Deploy coros-pulse-ai to VPS
 

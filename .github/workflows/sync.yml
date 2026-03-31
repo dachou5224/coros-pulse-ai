@@ -51,3 +51,22 @@ jobs:
         LLM_MAX_ATTEMPTS: "6"
         ACTIVITY_ADVICE_DELAY_SECONDS: "1.5"
       run: python src/activity_advice.py
+
+    - name: Export static JSON snapshots
+      env:
+        LANG: C.UTF-8
+        LC_ALL: C.UTF-8
+        PYTHONUTF8: "1"
+        GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_JSON_KEY }}
+      run: python scripts/export_static_data.py
+
+    - name: Sync static data to VPS
+      if: ${{ secrets.VPS_HOST != '' && secrets.VPS_USER != '' && secrets.VPS_KEY != '' }}
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USER }}
+        key: ${{ secrets.VPS_KEY }}
+        source: "show/static/data/*.json"
+        target: "/var/www/run-home/data"
+        strip_components: 3

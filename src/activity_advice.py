@@ -14,12 +14,14 @@ from pathlib import Path
 
 import pandas as pd
 import gspread
+from dotenv import load_dotenv
 from gspread.exceptions import APIError
 from gspread.utils import rowcol_to_a1
 from oauth2client.service_account import ServiceAccountCredentials
 
 # 确保可导入 coach
 ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(ROOT / ".env")
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 if str(ROOT / "src") not in sys.path:
@@ -153,6 +155,48 @@ def _parse_advice_slots(raw: str) -> dict:
         m = re.search(rf"【{re.escape(tag)}】\s*(.*?)(?=【|$)", raw, re.DOTALL)
         slots[tag] = (m.group(1).strip() if m else "")[:50000]
     return slots
+
+
+def _has_complete_advice_slots(slots: dict) -> bool:
+    return all((slots.get(tag) or "").strip() for tag in ADVICE_SLOTS)
+
+
+def _verify_written_row(
+    worksheet,
+    row_num: int,
+    *,
+    expected_aid: str,
+    id_col_idx: int,
+    col_indices: dict,
+    slots: dict,
+    utc_stamp: str,
+) -> tuple[bool, str]:
+    """
+    写后立即回读目标行，确认：
+    1. Activity ID 仍是期望行
+    2. 总评列内容匹配
+    3. 时间戳列内容匹配
+    """
+    row_vals = worksheet.row_values(row_num)
+    id_raw = row_vals[id_col_idx] if len(row_vals) > id_col_idx else ""
+    actual_aid = normalize_activity_id(id_raw)
+    if actual_aid != expected_aid:
+        return False, f"写后回读发现 Activity ID 不匹配：期望 {expected_aid}，实际 {actual_aid or id_raw!r}"
+
+    zongping_col = col_indices.get("总评", 0)
+    if zongping_col > 0:
+        actual_summary = row_vals[zongping_col - 1] if len(row_vals) >= zongping_col else ""
+        expected_summary = (slots.get("总评") or "").strip()
+        if expected_summary and actual_summary.strip() != expected_summary:
+            return False, "写后回读发现「总评」列内容与本次写入不一致"
+
+    meta_col = col_indices.get(META_COL, 0)
+    if meta_col > 0:
+        actual_stamp = row_vals[meta_col - 1] if len(row_vals) >= meta_col else ""
+        if actual_stamp.strip() != utc_stamp.strip():
+            return False, f"写后回读发现时间戳不一致：期望 {utc_stamp}，实际 {actual_stamp}"
+
+    return True, ""
 
 
 def main():
@@ -294,12 +338,17 @@ def main():
                 time.sleep(_ADVICE_LOOP_DELAY)
 
         slots = _parse_advice_slots(advice_text)
-        # 新 prompt 口语化输出无【标签】，解析为空时用 raw 写入总评
-        if not any(slots.get(t) for t in ADVICE_SLOTS) and advice_text:
-            slots["总评"] = advice_text[:50000]
-
-        if not any((slots.get(t) or "").strip() for t in ADVICE_SLOTS):
-            print(f"  ⏭ 跳过 Activity {aid}：LLM 无有效输出，不覆盖表格")
+        if not _has_complete_advice_slots(slots):
+            present = [tag for tag in ADVICE_SLOTS if (slots.get(tag) or "").strip()]
+            print(
+                f"  ⏭ 跳过 Activity {aid}：LLM 输出未完整拆成 5 段，"
+                f"仅解析到 {present or '0 段'}，不覆盖表格"
+            )
+            _agent_dbg(
+                "structured advice parse incomplete",
+                "H8",
+                {"aid": aid, "present_tags": present, "raw_preview": (advice_text or '')[:200]},
+            )
             continue
 
         sheet_row = id_to_row.get(aid)
@@ -322,6 +371,23 @@ def main():
             _write_advice_slots_batch(
                 activities_ws, sheet_row, col_indices, slots, utc_stamp=utc_stamp_cell
             )
+            ok, verify_msg = _verify_written_row(
+                activities_ws,
+                sheet_row,
+                expected_aid=aid,
+                id_col_idx=id_col_idx,
+                col_indices=col_indices,
+                slots=slots,
+                utc_stamp=utc_stamp_cell,
+            )
+            if not ok:
+                print(f"⚠️ 写后校验失败 | 行 {sheet_row} | Activity ID={aid} | {verify_msg}")
+                _agent_dbg(
+                    "post-write verification failed",
+                    "H7",
+                    {"sheet_row": sheet_row, "aid": aid, "message": verify_msg},
+                )
+                continue
             existing_ids.add(aid)
             appended += 1
             preview = (slots.get("总评") or "").replace("\n", " ").strip()
@@ -331,6 +397,7 @@ def main():
             if os.getenv("GITHUB_RUN_ID"):
                 log_extra = f" | GitHub run {os.getenv('GITHUB_RUN_ID')}"
             print(f"  ✓ 行 {sheet_row} | Activity ID={aid} | {META_COL}: {utc_stamp_cell}{log_extra}")
+            print("      写后校验: OK")
             print(f"      总评预览: {preview or '(空)'}")
         except APIError as e:
             print(f"⚠️ 写入活动 {aid} 失败: {e}")

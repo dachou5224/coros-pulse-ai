@@ -1,0 +1,371 @@
+
+<style>
+.wrap{padding:8px 0 20px}
+.ptabs{display:flex;gap:5px;margin-bottom:16px;flex-wrap:wrap}
+.ptab{padding:6px 14px;border-radius:20px;border:1.5px solid var(--color-border-tertiary);font-size:12px;cursor:pointer;color:var(--color-text-secondary);background:var(--color-background-primary);transition:all .12s;font-weight:400}
+.ptab.on{font-weight:500}
+.pc{display:none}.pc.on{display:block}
+.pstats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}
+.pstat{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:10px}
+.pl{font-size:11px;color:var(--color-text-tertiary);margin-bottom:2px}
+.pv{font-size:15px;font-weight:500;color:var(--color-text-primary)}
+.slbl{font-size:11px;font-weight:500;color:var(--color-text-secondary);letter-spacing:.06em;margin:14px 0 7px}
+.wg{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.wd{border-radius:6px;padding:7px 5px;border:.5px solid var(--color-border-tertiary);min-height:72px}
+.wdl{font-size:10px;color:var(--color-text-tertiary);margin-bottom:2px}
+.wdt{font-size:11px;font-weight:500;line-height:1.3}
+.wds{font-size:10px;color:var(--color-text-secondary);margin-top:3px;line-height:1.4}
+.kl{display:flex;flex-direction:column;gap:8px}
+.ki{display:flex;gap:8px;align-items:flex-start}
+.kt{flex-shrink:0;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:500;white-space:nowrap}
+.kd{font-size:12px;color:var(--color-text-secondary);line-height:1.6;padding-top:1px}
+.note{margin-top:14px;padding:10px 14px;border-radius:var(--border-radius-md);font-size:12px;line-height:1.65}
+.wklbl{font-size:11px;color:var(--color-text-secondary);margin:10px 0 5px;font-weight:500}
+.pt{width:100%;border-collapse:collapse;font-size:12px}
+.pt th,.pt td{padding:6px 8px;border-bottom:.5px solid var(--color-border-tertiary);text-align:left}
+.pt th{color:var(--color-text-secondary);font-weight:500}
+.pt tr:last-child td{border-bottom:none}
+.pace-ref{margin-top:20px;border-top:.5px solid var(--color-border-tertiary);padding-top:16px}
+</style>
+
+<div class="wrap">
+<div class="ptabs">
+  <div class="ptab on" onclick="sw(0)">第一期 · 基础</div>
+  <div class="ptab" onclick="sw(1)">第二期 · 构建</div>
+  <div class="ptab" onclick="sw(2)">第三期 · 发展</div>
+  <div class="ptab" onclick="sw(3)">第四期 · 专项</div>
+  <div class="ptab" onclick="sw(4)">第五期 · 减量</div>
+</div>
+
+<!-- Phase 1: Base -->
+<div class="pc on" id="p0">
+  <div class="pstats">
+    <div class="pstat"><div class="pl">周期</div><div class="pv">5/1–5/31</div></div>
+    <div class="pstat"><div class="pl">持续</div><div class="pv">4 周</div></div>
+    <div class="pstat"><div class="pl">周公里数</div><div class="pv">50–55 km</div></div>
+    <div class="pstat"><div class="pl">长跑距离</div><div class="pv">16–18 km</div></div>
+  </div>
+  <div class="slbl">典型周安排</div>
+  <div class="wg">
+    <div class="wd" style="border-style:dashed;background:var(--color-background-secondary)">
+      <div class="wdl">一</div><div class="wdt">休息</div><div class="wds">拉伸·泡沫轴</div>
+    </div>
+    <div class="wd" style="background:#EAF3DE;border-color:#C0DD97">
+      <div class="wdl">二</div><div class="wdt" style="color:#27500A">轻松跑</div><div class="wds">10 km<br>HR &lt; 145</div>
+    </div>
+    <div class="wd" style="background:#EAF3DE;border-color:#C0DD97">
+      <div class="wdl">三</div><div class="wdt" style="color:#27500A">轻松＋步伐</div><div class="wds">8 km<br>+8×20s加速</div>
+    </div>
+    <div class="wd" style="background:#EAF3DE;border-color:#C0DD97">
+      <div class="wdl">四</div><div class="wdt" style="color:#27500A">轻松跑</div><div class="wds">10 km<br>HR &lt; 145</div>
+    </div>
+    <div class="wd" style="background:#EAF3DE;border-color:#C0DD97">
+      <div class="wdl">五</div><div class="wdt" style="color:#27500A">轻松跑</div><div class="wds">8 km</div>
+    </div>
+    <div class="wd" style="background:#EAF3DE;border-color:#C0DD97">
+      <div class="wdl">六</div><div class="wdt" style="color:#27500A">中长跑</div><div class="wds">14 km<br>轻松配速</div>
+    </div>
+    <div class="wd" style="background:#E6F1FB;border-color:#B5D4F4">
+      <div class="wdl">日</div><div class="wdt" style="color:#0C447C">长跑</div><div class="wds">16–18 km<br>全程对话配速</div>
+    </div>
+  </div>
+  <div class="slbl">核心训练内容</div>
+  <div class="kl">
+    <div class="ki">
+      <span class="kt" style="background:#EAF3DE;color:#27500A">轻松跑</span>
+      <div class="kd">全程 HR &lt; 145，能与同伴正常对话。五月台中气温已升，以心率为锚点，不追配速数字。参考约 6'00"–6'30"/km，但随气温浮动。</div>
+    </div>
+    <div class="ki">
+      <span class="kt" style="background:#E6F1FB;color:#0C447C">长跑</span>
+      <div class="kd">每周一次 16–18 km，全程有氧区间（HR &lt; 150），不得加速。培养长时间跑步的适应性与脂肪燃烧能力，是整个夏训的地基。</div>
+    </div>
+    <div class="ki">
+      <span class="kt" style="background:#F1EFE8;color:#444441">步伐训练</span>
+      <div class="kd">轻松跑结束后进行 8×20 秒加速（约 4'20" 感觉），慢走 60 秒恢复。激活神经肌肉系统，改善跑步效率，不属于高强度训练。</div>
+    </div>
+  </div>
+  <div class="note" style="background:#E1F5EE;border:.5px solid #9FE1CB;color:#085041">
+    ☀️ 五月是热适应起点。建议训练时间固定在清晨 5:30–7:00，让身体提前适应高温高湿环境。本期不安排任何高强度训练，所有质量来自里程积累与习惯建立。
+  </div>
+</div>
+
+<!-- Phase 2: Build -->
+<div class="pc" id="p1">
+  <div class="pstats">
+    <div class="pstat"><div class="pl">周期</div><div class="pv">6/1–7/6</div></div>
+    <div class="pstat"><div class="pl">持续</div><div class="pv">5 周</div></div>
+    <div class="pstat"><div class="pl">周公里数</div><div class="pv">55–65 km</div></div>
+    <div class="pstat"><div class="pl">长跑距离</div><div class="pv">18–22 km</div></div>
+  </div>
+  <div class="slbl">典型周安排</div>
+  <div class="wg">
+    <div class="wd" style="border-style:dashed;background:var(--color-background-secondary)">
+      <div class="wdl">一</div><div class="wdt">休息</div><div class="wds">恢复优先</div>
+    </div>
+    <div class="wd" style="background:#FAEEDA;border-color:#FAC775">
+      <div class="wdl">二</div><div class="wdt" style="color:#633806">节奏跑</div><div class="wds">8 km总<br>含4km阈值段</div>
+    </div>
+    <div class="wd" style="background:#EAF3DE;border-color:#C0DD97">
+      <div class="wdl">三</div><div class="wdt" style="color:#27500A">轻松跑</div><div class="wds">10 km<br>HR &lt; 148</div>
+    </div>
+    <div class="wd" style="background:#E1F5EE;border-color:#9FE1CB">
+      <div class="wdl">四</div><div class="wdt" style="color:#085041">马配速跑</div><div class="wds">12 km总<br>含5km@5'20"</div>
+    </div>
+    <div class="wd" style="background:#EAF3DE;border-color:#C0DD97">
+      <div class="wdl">五</div><div class="wdt" style="color:#27500A">轻松跑</div><div class="wds">8 km</div>
+    </div>
+    <div class="wd" style="background:#EAF3DE;border-color:#C0DD97">
+      <div class="wdl">六</div><div class="wdt" style="color:#27500A">轻松跑</div><div class="wds">10 km</div>
+    </div>
+    <div class="wd" style="background:#E6F1FB;border-color:#B5D4F4">
+      <div class="wdl">日</div><div class="wdt" style="color:#0C447C">长跑</div><div class="wds">18–22 km<br>HR &lt; 150</div>
+    </div>
+  </div>
+  <div class="slbl">核心训练内容</div>
+  <div class="kl">
+    <div class="ki">
+      <span class="kt" style="background:#FAEEDA;color:#633806">节奏跑</span>
+      <div class="kd">2 km 热身 → 4–5 km 阈值段（HR 165–172，约 4'55"–5'05"，夏季以心率为准不追配速）→ 1–2 km 放松。每周一次，是本期最重要的质量训练。</div>
+    </div>
+    <div class="ki">
+      <span class="kt" style="background:#E1F5EE;color:#085041">马配速跑</span>
+      <div class="kd">全马目标配速 5'20"/km 的感知训练。先热身 3 km，再跑 5–6 km @ 5'20"，最后冷身 2 km。目的是让身体建立对比赛配速的生物力学记忆。</div>
+    </div>
+    <div class="ki">
+      <span class="kt" style="background:#E6F1FB;color:#0C447C">长跑</span>
+      <div class="kd">逐步增加至 22 km。六月气温 30°C+，必须在 6:00 前出发，全程携带 500 ml 水，以 HR &lt; 150 为硬性红线，超过立刻减速。</div>
+    </div>
+  </div>
+  <div class="note" style="background:#FAEEDA;border:.5px solid #FAC775;color:#633806">
+    🌡️ 六月高温预警：气温超过 32°C 时不在户外做阈值训练，必要时改在跑步机上完成节奏跑（调低 0.5% 坡度模拟室外阻力）。长跑前夜确保充分补水，跑中每 15 分钟饮水一次。
+  </div>
+</div>
+
+<!-- Phase 3: Development -->
+<div class="pc" id="p2">
+  <div class="pstats">
+    <div class="pstat"><div class="pl">周期</div><div class="pv">7/7–8/10</div></div>
+    <div class="pstat"><div class="pl">持续</div><div class="pv">5 周</div></div>
+    <div class="pstat"><div class="pl">周公里数</div><div class="pv">55–65 km</div></div>
+    <div class="pstat"><div class="pl">长跑距离</div><div class="pv">22–24 km</div></div>
+  </div>
+  <div class="slbl">典型周安排</div>
+  <div class="wg">
+    <div class="wd" style="border-style:dashed;background:var(--color-background-secondary)">
+      <div class="wdl">一</div><div class="wdt">休息</div><div class="wds">主动恢复</div>
+    </div>
+    <div class="wd" style="background:#FAECE7;border-color:#F5C4B3">
+      <div class="wdl">二</div><div class="wdt" style="color:#712B13">间歇训练</div><div class="wds">5×1000m<br>@4'20"–4'30"</div>
+    </div>
+    <div class="wd" style="background:#EAF3DE;border-color:#C0DD97">
+      <div class="wdl">三</div><div class="wdt" style="color:#27500A">轻松跑</div><div class="wds">10 km<br>HR &lt; 145</div>
+    </div>
+    <div class="wd" style="background:#FAEEDA;border-color:#FAC775">
+      <div class="wdl">四</div><div class="wdt" style="color:#633806">节奏跑</div><div class="wds">10 km总<br>含6km阈值</div>
+    </div>
+    <div class="wd" style="border-style:dashed;background:var(--color-background-secondary)">
+      <div class="wdl">五</div><div class="wdt">休息/步行</div><div class="wds">双质量周<br>必须充分恢复</div>
+    </div>
+    <div class="wd" style="background:#EAF3DE;border-color:#C0DD97">
+      <div class="wdl">六</div><div class="wdt" style="color:#27500A">轻松跑</div><div class="wds">10 km</div>
+    </div>
+    <div class="wd" style="background:#E6F1FB;border-color:#B5D4F4">
+      <div class="wdl">日</div><div class="wdt" style="color:#0C447C">长跑</div><div class="wds">22–24 km<br>天亮前出发</div>
+    </div>
+  </div>
+  <div class="slbl">核心训练内容</div>
+  <div class="kl">
+    <div class="ki">
+      <span class="kt" style="background:#FAECE7;color:#712B13">间歇训练</span>
+      <div class="kd">5–6×1000m，配速约 4'20"–4'30"（HR 上限约 180），组间慢跑 90 秒恢复。必须在清晨 5:30 前或室内跑机完成。这是提升最大摄氧量的核心课次，不可在高温下将就。</div>
+    </div>
+    <div class="ki">
+      <span class="kt" style="background:#FAEEDA;color:#633806">节奏跑</span>
+      <div class="kd">6–8 km 阈值段（HR 165–173），七月不追配速数字，以心率为准。与间歇训练隔开两天安排，避免累积疲劳导致过训。</div>
+    </div>
+    <div class="ki">
+      <span class="kt" style="background:#E6F1FB;color:#0C447C">长跑</span>
+      <div class="kd">22–24 km，必须在台中气温最低时段（4:30–7:30）完成。携带 500 ml 水 + 1 颗能量胶（约 km14 补充）。全程 HR 上限 152，超过立即减速步行。</div>
+    </div>
+  </div>
+  <div class="note" style="background:#FAECE7;border:.5px solid #F5C4B3;color:#712B13">
+    🔥 七月是全年最高强度月，也是最高风险月。34–38°C + 高湿下，质量训练宁可搬到室内，也不在高温下硬撑配速。若出现晨脉升高 5+ bpm、睡眠变差、情绪低落等信号，立即将该周降级为恢复周，身体信号优先于计划表。
+  </div>
+</div>
+
+<!-- Phase 4: Race-specific -->
+<div class="pc" id="p3">
+  <div class="pstats">
+    <div class="pstat"><div class="pl">周期</div><div class="pv">8/11–9/7</div></div>
+    <div class="pstat"><div class="pl">持续</div><div class="pv">4 周</div></div>
+    <div class="pstat"><div class="pl">周公里数</div><div class="pv">60–65 km</div></div>
+    <div class="pstat"><div class="pl">长跑距离</div><div class="pv">24–26 km</div></div>
+  </div>
+  <div class="slbl">典型周安排</div>
+  <div class="wg">
+    <div class="wd" style="border-style:dashed;background:var(--color-background-secondary)">
+      <div class="wdl">一</div><div class="wdt">休息</div><div class="wds">主动恢复</div>
+    </div>
+    <div class="wd" style="background:#FAECE7;border-color:#F5C4B3">
+      <div class="wdl">二</div><div class="wdt" style="color:#712B13">半马配速</div><div class="wds">3×4 km<br>@4'44"–4'50"</div>
+    </div>
+    <div class="wd" style="background:#EAF3DE;border-color:#C0DD97">
+      <div class="wdl">三</div><div class="wdt" style="color:#27500A">轻松跑</div><div class="wds">10 km</div>
+    </div>
+    <div class="wd" style="background:#E1F5EE;border-color:#9FE1CB">
+      <div class="wdl">四</div><div class="wdt" style="color:#085041">马配速长跑</div><div class="wds">20 km总<br>含12km@5'20"</div>
+    </div>
+    <div class="wd" style="background:#EAF3DE;border-color:#C0DD97">
+      <div class="wdl">五</div><div class="wdt" style="color:#27500A">轻松跑</div><div class="wds">8 km</div>
+    </div>
+    <div class="wd" style="background:#EAF3DE;border-color:#C0DD97">
+      <div class="wdl">六</div><div class="wdt" style="color:#27500A">轻松跑</div><div class="wds">10 km</div>
+    </div>
+    <div class="wd" style="background:#E6F1FB;border-color:#B5D4F4">
+      <div class="wdl">日</div><div class="wdt" style="color:#0C447C">长跑</div><div class="wds">24–26 km<br>后8km@马配速</div>
+    </div>
+  </div>
+  <div class="slbl">核心训练内容</div>
+  <div class="kl">
+    <div class="ki">
+      <span class="kt" style="background:#FAECE7;color:#712B13">半马配速</span>
+      <div class="kd">3–4×4 km @ 4'44"–4'50"，组间慢跑 2 分钟恢复。让身体对半马目标配速产生生物力学记忆。九月气温开始回落，配速将更容易达到。</div>
+    </div>
+    <div class="ki">
+      <span class="kt" style="background:#E1F5EE;color:#085041">马配速长跑</span>
+      <div class="kd">本期最重要训练。20 km 总量中有 12 km 维持 5'20"，直接模拟全马后半程的疲劳叠加状态。完成后 48 小时内避免高强度训练，充分补充蛋白质与碳水。</div>
+    </div>
+    <div class="ki">
+      <span class="kt" style="background:#E6F1FB;color:#0C447C">长跑</span>
+      <div class="kd">最长可达 26 km，最后 8 km 切入马配速（5'20"）。这是夏训全程里程峰值，完成后进入减量期。建议本期末安排一场 10 km 测试赛校准状态。</div>
+    </div>
+  </div>
+  <div class="note" style="background:#EAF3DE;border:.5px solid #C0DD97;color:#27500A">
+    ✅ 八月底九月初气温开始回落，是全年训练的黄金窗口期，之前整个夏季积累的有氧基础将在此快速兑现为速度。建议本期安排一场调整赛（半马或 10 km），作为秋季目标赛前的实战校准。
+  </div>
+</div>
+
+<!-- Phase 5: Taper -->
+<div class="pc" id="p4">
+  <div class="pstats">
+    <div class="pstat"><div class="pl">周期</div><div class="pv">9/8–9/28</div></div>
+    <div class="pstat"><div class="pl">持续</div><div class="pv">3 周</div></div>
+    <div class="pstat"><div class="pl">周公里数</div><div class="pv">25–45 km</div></div>
+    <div class="pstat"><div class="pl">核心目标</div><div class="pv">蓄力待发</div></div>
+  </div>
+
+  <div class="slbl">三周递减安排</div>
+  <div class="wklbl">第一周（70% 量）≈ 45 km</div>
+  <div class="wg" style="margin-bottom:10px">
+    <div class="wd" style="border-style:dashed;background:var(--color-background-secondary)">
+      <div class="wdl">一</div><div class="wdt">休息</div>
+    </div>
+    <div class="wd" style="background:#FAEEDA;border-color:#FAC775">
+      <div class="wdl">二</div><div class="wdt" style="color:#633806">节奏跑</div><div class="wds">8km含<br>5km阈值</div>
+    </div>
+    <div class="wd" style="background:#EAF3DE;border-color:#C0DD97">
+      <div class="wdl">三</div><div class="wdt" style="color:#27500A">轻松跑</div><div class="wds">8 km</div>
+    </div>
+    <div class="wd" style="background:#FAECE7;border-color:#F5C4B3">
+      <div class="wdl">四</div><div class="wdt" style="color:#712B13">间歇</div><div class="wds">4×800m<br>@4'20"</div>
+    </div>
+    <div class="wd" style="background:#EAF3DE;border-color:#C0DD97">
+      <div class="wdl">五</div><div class="wdt" style="color:#27500A">轻松跑</div><div class="wds">6 km</div>
+    </div>
+    <div class="wd" style="background:#EAF3DE;border-color:#C0DD97">
+      <div class="wdl">六</div><div class="wdt" style="color:#27500A">轻松跑</div><div class="wds">8 km</div>
+    </div>
+    <div class="wd" style="background:#E6F1FB;border-color:#B5D4F4">
+      <div class="wdl">日</div><div class="wdt" style="color:#0C447C">中长跑</div><div class="wds">16 km<br>轻松</div>
+    </div>
+  </div>
+
+  <div class="wklbl">第二周（55% 量）≈ 35 km</div>
+  <div class="wg" style="margin-bottom:10px">
+    <div class="wd" style="border-style:dashed;background:var(--color-background-secondary)">
+      <div class="wdl">一</div><div class="wdt">休息</div>
+    </div>
+    <div class="wd" style="background:#FAEEDA;border-color:#FAC775">
+      <div class="wdl">二</div><div class="wdt" style="color:#633806">半马配速</div><div class="wds">2×3 km<br>@4'44"</div>
+    </div>
+    <div class="wd" style="background:#EAF3DE;border-color:#C0DD97">
+      <div class="wdl">三</div><div class="wdt" style="color:#27500A">轻松跑</div><div class="wds">6 km</div>
+    </div>
+    <div class="wd" style="background:#EAF3DE;border-color:#C0DD97">
+      <div class="wdl">四</div><div class="wdt" style="color:#27500A">轻松跑</div><div class="wds">8 km</div>
+    </div>
+    <div class="wd" style="background:#EAF3DE;border-color:#C0DD97">
+      <div class="wdl">五</div><div class="wdt" style="color:#27500A">轻松跑</div><div class="wds">6 km</div>
+    </div>
+    <div class="wd" style="background:#EAF3DE;border-color:#C0DD97">
+      <div class="wdl">六</div><div class="wdt" style="color:#27500A">轻松跑</div><div class="wds">6 km</div>
+    </div>
+    <div class="wd" style="background:#E6F1FB;border-color:#B5D4F4">
+      <div class="wdl">日</div><div class="wdt" style="color:#0C447C">中长跑</div><div class="wds">13 km<br>轻松</div>
+    </div>
+  </div>
+
+  <div class="wklbl">第三周（赛前周）≈ 25 km</div>
+  <div class="wg">
+    <div class="wd" style="border-style:dashed;background:var(--color-background-secondary)">
+      <div class="wdl">一</div><div class="wdt">休息</div>
+    </div>
+    <div class="wd" style="background:#FAEEDA;border-color:#FAC775">
+      <div class="wdl">二</div><div class="wdt" style="color:#633806">激活跑</div><div class="wds">5km+<br>4×20s加速</div>
+    </div>
+    <div class="wd" style="background:#EAF3DE;border-color:#C0DD97">
+      <div class="wdl">三</div><div class="wdt" style="color:#27500A">轻松跑</div><div class="wds">4 km</div>
+    </div>
+    <div class="wd" style="background:#FAEEDA;border-color:#FAC775">
+      <div class="wdl">四</div><div class="wdt" style="color:#633806">配速感知</div><div class="wds">6km含2km<br>@比赛配速</div>
+    </div>
+    <div class="wd" style="border-style:dashed;background:var(--color-background-secondary)">
+      <div class="wdl">五</div><div class="wdt">休息</div><div class="wds">备料·补水</div>
+    </div>
+    <div class="wd" style="background:#EAF3DE;border-color:#C0DD97">
+      <div class="wdl">六</div><div class="wdt" style="color:#27500A">抖动跑</div><div class="wds">3 km<br>超轻松</div>
+    </div>
+    <div class="wd" style="background:#E6F1FB;border-color:#378ADD">
+      <div class="wdl">日</div><div class="wdt" style="color:#185FA5">🏁 比赛日</div><div class="wds">秋季目标赛</div>
+    </div>
+  </div>
+  <div class="note" style="background:#EEEDFE;border:.5px solid #AFA9EC;color:#3C3489">
+    💡 减量期最常见的错误是"感觉太轻松→忍不住多跑"。腿感变好是超量恢复的信号，不是变懒了。严格遵守量的递减，每周保留 1–2 次短暂的比赛配速感知，让神经肌肉保持锐利，而不是追求里程数字。
+  </div>
+</div>
+
+<!-- Always-visible pace reference -->
+<div class="pace-ref">
+  <div class="slbl">训练配速区间参考（秋赛目标）</div>
+  <table class="pt">
+    <tr><th>训练类型</th><th>目标配速</th><th>心率参考</th><th>备注</th></tr>
+    <tr><td>轻松跑</td><td>6'00"–6'30"</td><td>&lt; 145 bpm</td><td>夏季以心率为准，忽略配速数字</td></tr>
+    <tr><td>马拉松配速</td><td>5'18"–5'22"</td><td>155–163 bpm</td><td>全马目标 3:45 对应节奏</td></tr>
+    <tr><td>阈值·节奏跑</td><td>4'52"–5'02"</td><td>165–172 bpm</td><td>夏季降速 10–15s，心率锚定优先</td></tr>
+    <tr><td>半马配速</td><td>4'42"–4'47"</td><td>170–176 bpm</td><td>半马目标 1:40 对应节奏</td></tr>
+    <tr><td>VO₂max 间歇</td><td>4'18"–4'28"</td><td>≥ 178 bpm</td><td>仅用于间歇冲刺段，不可在高温下进行</td></tr>
+  </table>
+</div>
+</div>
+
+<script>
+const colors = [
+  {bg:'#E1F5EE',bd:'#1D9E75',tx:'#0F6E56'},
+  {bg:'#E6F1FB',bd:'#378ADD',tx:'#185FA5'},
+  {bg:'#FAEEDA',bd:'#BA7517',tx:'#854F0B'},
+  {bg:'#FAECE7',bd:'#D85A30',tx:'#993C1D'},
+  {bg:'#EEEDFE',bd:'#7F77DD',tx:'#534AB7'}
+];
+function sw(i){
+  document.querySelectorAll('.ptab').forEach((t,j)=>{
+    const on=j===i;
+    t.classList.toggle('on',on);
+    t.style.background=on?colors[j].bg:'var(--color-background-primary)';
+    t.style.borderColor=on?colors[j].bd:'var(--color-border-tertiary)';
+    t.style.color=on?colors[j].tx:'var(--color-text-secondary)';
+  });
+  document.querySelectorAll('.pc').forEach((p,j)=>p.classList.toggle('on',j===i));
+}
+sw(0);
+document.querySelectorAll('.ptab').forEach((t,i)=>t.onclick=()=>sw(i));
+</script>

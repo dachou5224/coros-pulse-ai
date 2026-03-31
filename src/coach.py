@@ -25,12 +25,6 @@ try:
 except ImportError:
     _OPENAI_TRANSIENT_EXC = ()
 
-try:
-    from card_render import render_activity_card, render_weekly_card
-    _CARD_RENDER_AVAILABLE = True
-except ImportError:
-    _CARD_RENDER_AVAILABLE = False
-
 # 从项目根加载 .env（与 analysis 等脚本一致，可被 CI 环境变量覆盖）
 _ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(_ROOT / ".env")
@@ -63,9 +57,6 @@ RUNNER_PROFILE = {
     "goal_time": RUNNER_GOAL_TIME,
     "injury_history": RUNNER_INJURY_HISTORY,
 }
-
-ENABLE_CARD_RENDER = os.getenv("ENABLE_CARD_RENDER", "false").strip().lower() == "true"
-CARD_BRAND_TAG = os.getenv("CARD_BRAND_TAG", "#AI跑步教练 #马拉松备战").strip()
 
 # 全角标点 → 半角：避免在部分 Linux/CI 环境下 httpx 构建请求时出现 ascii 编码错误（如 \uff08）
 _FW_PUNCT = str.maketrans(
@@ -271,16 +262,6 @@ def get_weekly_advice(weekly_activities_df, weekly_report_dict, recent_weeks_rep
     out = _call_llm(system, user, max_tokens=1050)
     if LLM_DELAY_SECONDS > 0:
         time.sleep(LLM_DELAY_SECONDS)
-    if ENABLE_CARD_RENDER and _CARD_RENDER_AVAILABLE and out:
-        try:
-            card_path = render_weekly_card(
-                weekly_report_dict=weekly_report_dict,
-                advice_text=out,
-                brand_tag=CARD_BRAND_TAG,
-            )
-            print(f"📸 周报图片已生成：{card_path}")
-        except Exception as e:
-            print(f"⚠️ 图片生成失败（不影响文字输出）: {e}")
     return out
 
 
@@ -314,33 +295,32 @@ def get_activity_advice(activity_row, weekly_context=None, recent_activities: li
         return f"  {date} | {name} | {dist} km | {dur} min | 配速 {pace} | 心率 {hr} | 步频 {cad} spm | 爬升 {elev} m{tag}"
 
     system = (
-        "你是一位有15年带队经验的马拉松主教练，正在给你熟悉的学员做训练后的口头复盘。\n"
-        "你了解他的身体状况、训练习惯和目标，你们之间有信任感，不需要每次都从头介绍基础知识。\n\n"
+        "你是一位有15年带队经验的马拉松主教练，正在给熟悉的学员做单次训练复盘。\n"
+        "你需要输出给 Google Sheet 的结构化点评，供不同列分别写入。\n\n"
 
-        "【说话方式】\n"
-        "- 像朋友发微信语音一样，直接说最重要的一件事，不要面面俱到。\n"
-        "- 禁止使用任何【标题】格式，禁止分段加粗，直接写连贯的段落。\n"
-        "- 不要每次都提 VDOT 数值，不要重复跑者已知道的基础知识。\n"
-        "- 允许使用口语：'这趟跑得还行'、'说实话这次有点浪'、'心率数字不好看但别慌'。\n"
-        "- 根据这次跑步的实际情况决定语气：好的跑直接夸，有问题的跑直接点，不要每次都中性平衡。\n\n"
+        "【核心要求】\n"
+        "- 必须严格输出 5 段，并且每段都用下面的标签开头，标签名一字不差：\n"
+        "【总评】\n"
+        "【配速】\n"
+        "【心率】\n"
+        "【步频与爬升】\n"
+        "【下次训练课】\n"
+        "- 每个标签只能出现一次，不能遗漏，不能合并。\n"
+        "- 每个标签后的内容只写该维度，不要串到别的维度。\n"
+        "- 不要输出除这 5 段之外的任何前言、结尾、列表符号或 Markdown。\n\n"
 
-        "【诊断逻辑（内部判断，不要逐条输出）】\n"
-        "先判断这是什么性质的跑步：\n"
-        "- 心率 < MAF上限 且配速合理 → 好的E跑，重点夸执行力，给下次微调建议\n"
-        "- 心率超过MAF上限超过8bpm → 直接说'这趟跑快了'，给一个具体的降速数字\n"
-        "- 长距离(≥15km)但心率偏高 → 指出LSD跑成了混氧跑，这是最需要纠正的错误\n"
-        "- 短距离低心率 → 肯定有氧积累，提示是否可以引入强度变化\n"
-        "- 配速和心率都异常（如12分钟配速高心率）→ 直接说明这是疲劳信号，建议休息\n\n"
+        "【各段写法】\n"
+        "- 【总评】：30-70 字。判断这趟跑总体质量，直说好坏。\n"
+        "- 【配速】：30-70 字。评价这次配速是否合理，并给下次同类训练的配速建议。\n"
+        "- 【心率】：30-70 字。评价心率控制是否合理，并给下次心率上限或目标区间。\n"
+        "- 【步频与爬升】：20-60 字。只谈步频、地形、爬升影响和动作经济性。\n"
+        "- 【下次训练课】：40-90 字。必须给出下一次训练类型、距离或时长、配速范围、心率要求。\n\n"
 
-        "【输出要求】\n"
-        "- 总字数150-220字，不超过3个自然段\n"
-        "- 第一段：这趟跑的定性（1-2句，直接给结论）\n"
-        "- 第二段：最值得关注的一个数据点，给出解读和原因（不要列举所有数据）\n"
-        "- 第三段：下次同类型训练的具体执行指令，必须包含配速数字和心率数字，1-2句\n"
-        "- 如果这趟跑没什么问题，可以只写两段，不要强行凑内容\n"
-        "- 如果提供了近期训练背景，可以引用对比（如'比上次心率低了5下'、'连续三次都是E跑了'），\n"
-        "  让学员感受到你在持续关注他，而不是每次从零开始评估。\n"
-        "- 但不要把近期记录逐条复述，只在有意义的时候引用。\n"
+        "【诊断原则】\n"
+        "- 如果是恢复跑，就强调恢复质量，不要给高强度建议。\n"
+        "- 如果是 LSD 但心率偏高，就明确指出跑成了混氧跑。\n"
+        "- 如果近期训练背景有对比价值，可以引用一次，但不要复述整个历史。\n"
+        "- 所有建议都要具体到数字，尤其是配速和心率。\n"
     )
     profile_blob = (
         f"【跑者画像】\n"
@@ -367,14 +347,4 @@ def get_activity_advice(activity_row, weekly_context=None, recent_activities: li
     out = _call_llm(system, user, max_tokens=750)
     if LLM_DELAY_SECONDS > 0:
         time.sleep(LLM_DELAY_SECONDS)
-    if ENABLE_CARD_RENDER and _CARD_RENDER_AVAILABLE and out:
-        try:
-            card_path = render_activity_card(
-                activity_row=activity_row.to_dict() if hasattr(activity_row, "to_dict") else activity_row,
-                advice_text=out,
-                brand_tag=CARD_BRAND_TAG,
-            )
-            print(f"📸 单次点评图片已生成：{card_path}")
-        except Exception as e:
-            print(f"⚠️ 图片生成失败（不影响文字输出）: {e}")
     return out

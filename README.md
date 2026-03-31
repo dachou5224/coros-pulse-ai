@@ -7,10 +7,11 @@
 ## 功能概览
 
 - **Strava 同步**（`src/main.py`）：定时拉取 Strava 活动，写入 Google Sheet「Coros_Running_Data」的 Activities 表，含每公里 splits（配速、心率）的 JSON。
-- **周报分析**（`src/analysis.py`）：按周汇总跑量、计算 TRIMP/CTL/ATL/TSB、VDOT、LSD 解耦率等，写入同一 Sheet 的 **Weekly_Report** 表；可选调用 Gemini 生成本周教练点评与单次跑步点评（写入 Weekly_Report 的 Coach Advice 列与 **Activity_Advice** 表）。
+- **周报分析**（`src/analysis.py`）：按周汇总跑量、计算 TRIMP/CTL/ATL/TSB、VDOT、LSD 解耦率等，写入同一 Sheet 的 **Weekly_Report** 表；可选调用 Gemini 生成本周教练点评。单次跑步点评由 `src/activity_advice.py` 写回 **Activities** 表的结构化列：`总评`、`配速`、`心率`、`步频与爬升`、`下次训练课`、`点评更新时间(UTC)`。
 - **历史回填**（`src/history_backfill.py`）：手动一次性按历史数据生成完整周报（用于首次建表或补全）。
 - **Streamlit 看板**（`src/app.py`）：从同一 Sheet 的 Weekly_Report 读数据（gspread + Secrets），展示核心看板、历史与指标说明。
-- **周期训练周报展示**（`show/app.py`）：从 Weekly_Report 的 CSV URL 读数据（无需 GCP 凭证），展示 PMC、TSB、VDOT、LSD 解耦等；可选环境变量 `WEEKLY_REPORT_CSV_URL` 覆盖默认链接。周报在 Sheet 侧约**每周**更新，Streamlit 对 CSV 的默认缓存为 **24 小时**（`WEEKLY_REPORT_CSV_CACHE_TTL_SEC`），以减少对 Google 的请求。
+- **周期训练周报展示**（`show/app.py`）：从 Weekly_Report 的 CSV URL 读数据（无需 GCP 凭证），展示最近 **8 周** 的 PMC、TSB、VDOT、LSD 解耦等趋势；单次跑步点评侧栏读取 Activities 的公开 CSV。页面当前为浅色主题，不再提供末尾原始数据视图。可选环境变量 `WEEKLY_REPORT_CSV_URL`、`ACTIVITY_ADVICE_CSV_URL` 覆盖默认链接。周报默认缓存 **24 小时**，活动点评默认缓存 **5 分钟**，让新活动进表后能较快反映到页面。
+- **夏训五期计划与执行进度**（`show/app.py` 视图「夏训计划与执行进度」）：`data/training/plan.json` 为各期日期与周跑量区间（机器可读）；`docs/summer_training_plan_5phases.html` 为五期 Tab 与配速参考正文；执行进度表与周报 **同源 CSV**，按 **Week End** 归属当期，将周跑量与计划区间对比（在区间内 / 低于 / 高于 / 无数据）。
 
 ---
 
@@ -26,9 +27,18 @@ coros-pulse-ai/
 │   ├── history_backfill.py  # 历史周报回填
 │   ├── app.py               # Streamlit 看板 Pulse（gspread + Secrets）
 │   └── test_coach.py        # 教练点评本地测试
-├── show/                    # 周期训练周报展示（CSV 只读）
+├── scripts/
+│   └── export_static_data.py # 导出静态站同源 JSON 快照
+├── data/training/
+│   └── plan.json            # 夏训五期日期与周跑量区间（与 show 联动）
+├── docs/
+│   └── summer_training_plan_5phases.html  # 夏训计划正文（Tab + 配速表）
+├── show/                    # 周期训练周报展示（Streamlit + 静态前端）
 │   ├── app.py               # Streamlit 入口
+│   ├── training_plan.py     # 夏训计划加载与周报对齐逻辑
 │   ├── static/              # 静态 HTML（index.html，可部署至 VPS）
+│   │   ├── config.js        # 静态页默认数据源入口
+│   │   └── data/            # 同源 JSON 快照（weekly_report / activities）
 │   ├── assets/styles.css    # Streamlit 样式
 │   └── content/
 ├── card_render.py           # 教练点评卡片图片生成（html2image）
@@ -66,8 +76,8 @@ coros-pulse-ai/
 
 - 同步与周报脚本：上述变量需在运行环境中设置（如 `.env` + `python-dotenv`，且 `.env` 已加入 `.gitignore`）。
 - Streamlit 看板（`src/app.py`）使用 **Streamlit Secrets**：在 `.streamlit/secrets.toml` 中配置 `gcp_service_account`（或云平台提供的 Secrets），用于读 Sheet。**勿将 `secrets.toml` 提交到仓库。** 读 **Weekly_Report** 的默认缓存为 **24 小时**（`PULSE_WEEKLY_CACHE_TTL_SEC`，秒），与「周报周更」节奏一致，减少 gspread / Sheets API 调用；需要更快刷新时可改小该值。
-- 周期训练周报展示（`show/app.py`）**可选**环境变量：`WEEKLY_REPORT_CSV_URL`（Weekly Report 表 CSV 导出链接，不设则使用代码内默认公开链接）；`WEEKLY_REPORT_CSV_CACHE_TTL_SEC`（CSV HTTP 缓存秒数，默认 86400）。
-- **教练点评**（`src/analysis.py` 调用 `src/coach.py`）：使用 OpenAI 兼容方式调用 Google Gemini，生成本周教练点评与单次跑步点评。可选环境变量（见 `.env.example`）：`API_KEY`（或 `GOOGLE_API_KEY` / `GEMINI_API_KEY`）、`BASE_URL`（如 `https://generativelanguage.googleapis.com/v1beta/openai`，勿带尾部斜线）、`COACH_MODEL` 或 `MODEL_NAME`（默认 `gemini-2.0-flash`）、`LLM_DELAY_SECONDS`。未配置时周报仍会写入，Coach Advice 列为「暂无」。
+- 周期训练周报展示（`show/app.py`）**可选**环境变量：`WEEKLY_REPORT_CSV_URL`（Weekly_Report 表 CSV 导出链接）、`WEEKLY_REPORT_CSV_CACHE_TTL_SEC`（默认 86400）、`ACTIVITY_ADVICE_CSV_URL`（Activities 表 CSV 导出链接）、`ACTIVITY_ADVICE_CSV_CACHE_TTL_SEC`（默认 300，建议 300-900）。
+- **教练点评**（`src/analysis.py` / `src/activity_advice.py` 调用 `src/coach.py`）：使用 OpenAI 兼容方式调用 Google Gemini。周报仍写入 `Weekly_Report` 的 `Coach Advice` 列；单次跑步点评不再使用 Activities 表中的旧 `Coach Advice` 列，而是写入结构化列（`总评`、`配速`、`心率`、`步频与爬升`、`下次训练课`、`点评更新时间(UTC)`）。可选环境变量（见 `.env.example`）：`API_KEY`（或 `GOOGLE_API_KEY` / `GEMINI_API_KEY`）、`BASE_URL`（如 `https://generativelanguage.googleapis.com/v1beta/openai`，勿带尾部斜线）、`COACH_MODEL` 或 `MODEL_NAME`（默认 `gemini-2.0-flash`）、`LLM_DELAY_SECONDS`。
 
 ### GitHub Actions Secrets（仓库 Settings → Secrets and variables → Actions）
 
@@ -87,7 +97,7 @@ coros-pulse-ai/
 
 **说明**：
 
-- `API_KEY` 与 `GEMINI_API_KEY` 只配一个即可；都不配时周报仍会写入 Sheet，但 Coach Advice / 单次点评不会调用 LLM。
+- `API_KEY` 与 `GEMINI_API_KEY` 只配一个即可；都不配时周报仍会写入 Sheet，但周报 `Coach Advice` 与 Activities 结构化单次点评都不会调用 LLM。
 - **ci.yml** 不读取任何 Secrets。
 - **deploy.yml** 不配 `VPS_*` 时，仅 deploy 任务失败；**sync / weekly / backfill 不受影响**。
 - Streamlit Pulse 的 `gcp_service_account` 在 **VPS 上的** `.streamlit/secrets.toml` 配置，**不是** GitHub Secret（除非改用其它托管方式自行注入）。
@@ -146,16 +156,31 @@ streamlit run src/app.py
 streamlit run show/app.py
 ```
 
+说明：当前 `show/app.py` 仅保留「夏训计划与执行进度 / 本周概览 / 体能与 TSB 图表 / VDOT 与解耦」四个视图；图表类视图统一展示最近 **8 周** 数据。
+
+### 导出静态站同源快照
+
+```bash
+python scripts/export_static_data.py
+```
+
+该脚本会生成：
+
+- `show/static/data/weekly_report.json`
+- `show/static/data/activities.json`
+
+优先使用 Google Sheet 凭证直读；若网络或凭证不可用，则回退到 `WEEKLY_REPORT_CSV_URL` / `ACTIVITY_ADVICE_CSV_URL`。
+
 ### 静态 HTML 展示（轻量替代，无需 Python）
 
 `show/static/` 下提供纯前端版本，可直接用浏览器打开或部署到任意静态托管（GitHub Pages、Netlify、Vercel 等），无需 Streamlit 或 Docker。
 
 | 入口 | 说明 |
 |------|------|
-| `show/static/index.html` | 周期训练周报（近四周 PMC/TSB/VDOT/LSD 图表、KPI、本周教练点评、单次跑步教练点评、指标说明） |
+| `show/static/index.html` | 周期训练周报（最近 8 周趋势图、KPI、本周教练点评、单次跑步教练点评、训练跟进、指标说明） |
 
-- **数据源**：默认使用与 `show/app.py` 相同的公开 CSV URL（周报含 Coach Advice 列时自动展示「本周教练点评」；也支持 本周总评/核心诊断/下周药方 三段合并展示）；若遇 CORS 限制，可通过 URL 参数 `?data=同源 JSON 地址` 或部署时提供同源数据。单次跑步教练点评需在 Google 表格中发布 **Activities** 表为 CSV，并通过 `?activity_advice=URL` 或 `window.ACTIVITY_ADVICE_URL` 传入，否则该区块显示「暂无单次跑步点评」。
-- **本地预览**：用浏览器直接打开 `show/static/index.html`；或 `cd show/static && python -m http.server 8080` 后访问 `http://localhost:8080`。
+- **数据源**：静态页默认读取同源快照 [show/static/data/weekly_report.json](/Users/liuzhen/AI-projects/coros-pulse-ai/show/static/data/weekly_report.json) 和 [show/static/data/activities.json](/Users/liuzhen/AI-projects/coros-pulse-ai/show/static/data/activities.json)，避免浏览器直连 Google CSV 的 CORS 问题。单次跑步教练点评读取 **Activities** 表中的结构化列（优先展示 `总评`）；若需要临时切源，仍可通过 `?data=URL`、`?activity_advice=URL` 或 [show/static/config.js](/Users/liuzhen/AI-projects/coros-pulse-ai/show/static/config.js) 覆盖。
+- **本地预览**：推荐 `cd show/static && python -m http.server 8080` 后访问 `http://localhost:8080`；若直接双击 `index.html`，浏览器可能因为 `file://` 限制而阻止 `fetch('./data/*.json')`。
 
 #### VPS 部署（静态首页 + Nginx）
 
@@ -232,8 +257,9 @@ push 到 `main` 且变更命中 `deploy.yml` 配置的路径时，**`.github/wor
 
 - **sync.yml**：每日 10:00 北京时间运行 `main.py` + `activity_advice.py`，同步 Strava 活动并生成单次跑步点评。
 - **weekly_report.yml**：每周日 23:00 北京时间运行 `analysis.py`，生成当周周报。
+- **静态快照导出**：`scripts/export_static_data.py` 会把 `Weekly_Report` 与 `Activities` 导出为静态站同源 JSON；`sync.yml` 和 `weekly_report.yml` 在数据更新后都会执行这一步，并在配置了 `VPS_*` secrets 时把 `show/static/data/*.json` 推到 VPS 静态目录。
 - **backfill_history.yml**：仅支持手动触发（workflow_dispatch），运行 `history_backfill.py` 做历史回填。
-- **ci.yml**：push / PR 时安装 `requirements-docker.txt` 并对 `src/`、`show/` 做 `compileall` 语法检查。
+- **ci.yml**：push / PR 时安装 `requirements-docker.txt`，对 `src/`、`show/` 做 `compileall`，并额外检查 `show/static/config.js`、`show/static/data.js` 与 `show/static/index.html` 内联脚本语法，避免前端重构后静态页静默失效。
 - **deploy.yml**（与 `chem_portal/.github/workflows/deploy.yml` 同源模式）：向 `main` 推送且变更涉及 `src/`、`show/` 或 Docker 相关文件时，经 SSH 在 VPS 上 `git pull` + `docker compose up -d --build`。需在仓库 Secrets 中配置 **`VPS_HOST`**、**`VPS_USER`**、**`VPS_KEY`**（与 chem_portal 一致；勿在脚本中 `echo` 私钥全文）。
 
 确保数据流水线 Secrets（至少 4 个 Strava/Google + 1 个 Gemini）已配置。**deploy** 与数据同步相互独立：未配 VPS 时仅 deploy 失败，不影响 sync/weekly。
@@ -243,8 +269,15 @@ push 到 `main` 且变更命中 `deploy.yml` 配置的路径时，**`.github/wor
 1. **VPS 一次性准备**：安装 Docker 与 Compose；将本仓库 clone 到 **`/root/coros-pulse-ai`**（即 `DEPLOY_ROOT=/root` 且 `COROS_REPO_DIR=coros-pulse-ai`，与其它路径不一致时在 VPS 上设置这两项）。创建静态目录 **`/var/www/run-home`**（或自定义后设 **`COROS_STATIC_WEB_ROOT`**），Nginx 的 `root` 指向该目录。
 2. **默认服务**：`docker compose up -d --build` 仅启动 **coros-show**（周报 Streamlit），宿主机端口 **8512**（避免与同机 chem_portal 的 8501 冲突）。
 3. **Pulse 看板（可选）**：在 **`/root/coros-pulse-ai`** 下放置 **`.streamlit/secrets.toml`**，并在 VPS 上设置 **`COMPOSE_PROFILES=pulse`** 后再执行 compose，将额外启动 Pulse，映射 **8511**。
-4. **环境变量**：可在 compose 同目录使用 `.env` 传入 `WEEKLY_REPORT_CSV_URL`、`WEEKLY_REPORT_CSV_CACHE_TTL_SEC`、`PULSE_WEEKLY_CACHE_TTL_SEC` 等。
+4. **环境变量**：可在 compose 同目录使用 `.env` 传入 `WEEKLY_REPORT_CSV_URL`、`WEEKLY_REPORT_CSV_CACHE_TTL_SEC`、`ACTIVITY_ADVICE_CSV_URL`、`ACTIVITY_ADVICE_CSV_CACHE_TTL_SEC`、`PULSE_WEEKLY_CACHE_TTL_SEC` 等。建议把 Weekly_Report 与 Activities 两个公开 CSV 链接都写入，这样 `show/app.py` 无需重新部署就会随 Sheets 数据自动变化；静态页则优先读取同源 `data/*.json`。
 5. **静态首页**：每次 deploy 在 VPS 上执行 `rsync`：`show/static/` → **`/var/www/run-home`**（或 `COROS_STATIC_WEB_ROOT`）。
+
+### 推荐的数据刷新链路
+
+- **代码发布**：继续走 `deploy.yml`。只有 UI / Python / CSS 变更时才需要部署。
+- **数据刷新**：继续走 `sync.yml` 与 `weekly_report.yml`。它们把新活动和最新周报写进同一个 Google Sheet。
+- **show/app.py 自动更新**：容器读取 `WEEKLY_REPORT_CSV_URL` 与 `ACTIVITY_ADVICE_CSV_URL`，页面刷新时直接拉 Google 发布 CSV；活动点评缓存建议 5 分钟，周报缓存 24 小时。
+- **静态页自动更新**：Nginx 托管 [show/static/index.html](/Users/liuzhen/AI-projects/coros-pulse-ai/show/static/index.html) 和同源 `json` 快照；`sync.yml` / `weekly_report.yml` 在数据更新后把最新 `show/static/data/*.json` 上传到 VPS，因此新活动进表后不需要重新 deploy 代码，只要前端刷新即可看到更新。
 
 本地构建：`docker compose up -d --build`；仅语法验证可参考 **ci.yml**。
 
@@ -253,7 +286,7 @@ push 到 `main` 且变更命中 `deploy.yml` 配置的路径时，**`.github/wor
 ## 与 coros-data-show 的关系
 
 **原 coros-data-show 已合并至本仓库的 `show/` 目录**。若曾单独克隆 coros-data-show，可改为使用本仓的 `show/` 入口：`streamlit run show/app.py`。  
-show 为**只读展示**：通过 Weekly_Report 的 CSV URL（或环境变量 `WEEKLY_REPORT_CSV_URL`）读数据，无需 GCP 凭证；默认 **24h** 缓存 CSV（`WEEKLY_REPORT_CSV_CACHE_TTL_SEC`）以降低对 Google 的请求频率。本仓 `src/` 负责**写** Sheet（同步 + 周报）。
+show 为**只读展示**：`show/app.py` 通过 Weekly_Report / Activities 的 CSV URL 读数据，无需 GCP 凭证；静态页默认读同源 `json` 快照。`show/app.py` 默认 **24h** 缓存周报 CSV、**5min** 缓存活动点评 CSV，以降低对 Google 的请求频率。本仓 `src/` 负责**写** Sheet（同步 + 周报）。
 
 ---
 

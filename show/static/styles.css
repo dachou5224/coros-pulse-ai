@@ -105,6 +105,13 @@ details summary { cursor: pointer; font-weight: 600; }
 @media (max-width: 900px) { .cols-2 { grid-template-columns: 1fr; } }
 .cols-2-equal { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 @media (max-width: 700px) { .cols-2-equal { grid-template-columns: 1fr; } }
+.layout-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.95fr); gap: 1.25rem; align-items: start; }
+.layout-main { min-width: 0; }
+.layout-side { position: sticky; top: 1rem; }
+@media (max-width: 1100px) {
+    .layout-grid { grid-template-columns: 1fr; }
+    .layout-side { position: static; }
+}
 
 /* 本周教练点评 */
 .coach-advice-block { margin: 1rem 0; }
@@ -131,3 +138,74 @@ details summary { cursor: pointer; font-weight: 600; }
 .run-advice-summary { font-weight: 600; color: #d4b483; margin-bottom: 0.5rem; }
 .run-advice-text { line-height: 1.5; margin-top: 0.5rem; white-space: pre-wrap; }
 .run-advice-strava { margin-top: 0.5rem; font-size: 0.9em; opacity: 0.9; }
+
+.summary-table-block { margin: 1.5rem 0 0.5rem; }
+
+.advice-card, .follow-card {
+    background: rgba(39, 39, 42, 0.68);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+}
+
+.advice-section {
+    padding-top: 8px;
+    margin-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.advice-section-title {
+    color: #d4b483;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+}
+
+.advice-section-body {
+    color: #e4e4e7;
+    font-size: 12px;
+    line-height: 1.65;
+}
+
+.follow-phase {
+    color: #fafafa;
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.follow-relation {
+    color: #d4d4d8;
+    font-size: 12px;
+    line-height: 1.5;
+    margin-bottom: 10px;
+}
+
+.follow-kpis {
+    display: grid;
+    gap: 6px;
+    color: #d4b483;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.follow-list {
+    margin: 0.3rem 0 0.8rem 1rem;
+    padding: 0;
+    color: #e4e4e7;
+    font-size: 12px;
+    line-height: 1.65;
+}
+
+.phase-note {
+    background: rgba(212, 180, 131, 0.08);
+    border: 1px solid rgba(212, 180, 131, 0.18);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 12px;
+    line-height: 1.65;
+    color: #e4e4e7;
+    margin-top: 8px;
+}

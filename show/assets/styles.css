@@ -1,43 +1,195 @@
-/* 1. 引入高级字体 (Inter + Libre Baskerville) */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap');
 
-/* 2. 全局文字颜色优化 (比纯白更护眼的浅灰白) */
 html, body, [class*="css"] {
     font-family: 'Inter', sans-serif;
-    color: #e4e4e7; /* Zinc-200: 柔和的浅白 */
+    color: #1f2937;
 }
 
-/* 3. 标题强化 (使用衬线体，更亮一点) */
 h1, h2, h3, h4, h5, h6 {
     font-family: 'Libre Baskerville', serif !important;
-    color: #fafafa !important; /* 几乎纯白 */
+    color: #111827 !important;
     font-weight: 700;
 }
 
-/* 4. 强制背景 (防止 config.toml 没生效时的双重保险) */
 .stApp {
-    background-color: #18181b;
+    background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
 }
 
-/* 5. 卡片/指标样式 (毛玻璃效果) */
-div[data-testid="stMetric"], div[data-testid="stExpander"] {
-    background-color: rgba(39, 39, 42, 0.6); /* 半透明黑 */
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
+[data-testid="stHeader"] {
+    background: rgba(248, 250, 252, 0.86);
+}
+
+[data-testid="stSidebar"] {
+    background: #f7f4ee;
+    border-right: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+[data-testid="stSidebar"] * {
+    color: #1f2937 !important;
+}
+
+div[data-testid="stMetric"],
+div[data-testid="stExpander"],
+div[data-testid="stDataFrame"] {
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid rgba(203, 213, 225, 0.9);
+    border-radius: 12px;
     padding: 15px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 12px 30px rgba(148, 163, 184, 0.12);
 }
 
-/* 6. 指标数值颜色 (金色高亮) */
+div[data-testid="stMetricLabel"],
+div[data-testid="stMetricDelta"],
+.stCaption,
+[data-testid="stMarkdownContainer"] p,
+[data-testid="stMarkdownContainer"] li,
+[data-testid="stMarkdownContainer"] label {
+    color: #4b5563 !important;
+}
+
 div[data-testid="stMetricValue"] {
-    color: #d4b483 !important;
+    color: #0f766e !important;
 }
 
-/* 7. 链接颜色 */
 a {
-    color: #d4b483 !important;
+    color: #0f766e !important;
     text-decoration: none;
 }
+
 a:hover {
     text-decoration: underline;
+}
+
+div[role="radiogroup"] {
+    gap: 0.5rem !important;
+}
+
+div[role="radiogroup"] label {
+    min-height: 2.5rem;
+    padding: 0.3rem 0.8rem !important;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.88);
+    border: 1px solid rgba(203, 213, 225, 0.95);
+    box-shadow: 0 4px 12px rgba(148, 163, 184, 0.08);
+}
+
+div[role="radiogroup"] p {
+    color: #1f2937 !important;
+    font-size: 0.95rem !important;
+}
+
+.advice-card,
+.follow-card {
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(203, 213, 225, 0.92);
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+    box-shadow: 0 14px 36px rgba(148, 163, 184, 0.12);
+}
+
+.advice-card-header {
+    color: #0f172a;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 12px;
+}
+
+.advice-section {
+    padding-top: 8px;
+    margin-top: 8px;
+    border-top: 1px solid rgba(226, 232, 240, 0.95);
+}
+
+.advice-section-title {
+    color: #0f766e;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+}
+
+.advice-section-body {
+    color: #334155;
+    font-size: 12px;
+    line-height: 1.65;
+}
+
+.follow-phase {
+    color: #0f172a;
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.follow-relation {
+    color: #475569;
+    font-size: 12px;
+    line-height: 1.55;
+    margin-bottom: 10px;
+}
+
+.follow-kpis {
+    display: grid;
+    gap: 6px;
+    color: #0f766e;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.phase-note {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 12px;
+    line-height: 1.65;
+    color: #334155;
+    margin-top: 8px;
+}
+
+@media (max-width: 900px) {
+    .stApp [data-testid="stSidebar"] {
+        min-width: 0 !important;
+    }
+
+    .stApp [data-testid="stSidebar"] > div:first-child {
+        width: min(78vw, 320px) !important;
+    }
+
+    .stApp [data-testid="stSidebar"][aria-expanded="true"] + div,
+    .stApp [data-testid="stSidebar"][aria-expanded="true"] ~ div {
+        pointer-events: auto !important;
+    }
+
+    .stApp [data-testid="stSidebar"][aria-expanded="true"] [data-testid="stSidebarCollapseButton"] {
+        z-index: 30;
+    }
+
+    div[role="radiogroup"] {
+        gap: 0.4rem !important;
+        flex-wrap: wrap !important;
+    }
+
+    div[role="radiogroup"] label {
+        padding: 0.2rem 0.65rem !important;
+        background: rgba(255, 255, 255, 0.95);
+    }
+
+    .advice-card,
+    .follow-card {
+        padding: 12px 14px;
+    }
+
+    .advice-card-header,
+    .follow-phase {
+        font-size: 14px;
+    }
+
+    .advice-section-body,
+    .follow-relation,
+    .follow-kpis,
+    .phase-note {
+        font-size: 13px;
+    }
 }

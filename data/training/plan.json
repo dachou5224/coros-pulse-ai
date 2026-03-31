@@ -1,0 +1,68 @@
+{
+  "title": "夏训五期",
+  "training_year": 2026,
+  "notes": "日期按训练年日历；与仓库 docs/summer_training_plan_5phases.html 一致。",
+  "csv_column_map": {
+    "week_start": "Week Start",
+    "week_end": "Week End",
+    "distance_km": "Distance (km)"
+  },
+  "default_weekly_report_csv_url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQKYBbug9yQhYtejoO-9OMKXYQfA1Ju4ReO2YvYb7kqhWlrczvSrnHCmK_YBc5B6olsbBfUoP2Jbn5b/pub?gid=774375516&single=true&output=csv",
+  "phases": [
+    {
+      "id": "p0",
+      "name": "第一期 · 基础",
+      "start": "2026-05-01",
+      "end": "2026-05-31",
+      "weeks_planned": 4,
+      "planned_week_km_min": 50,
+      "planned_week_km_max": 55,
+      "long_run_km_min": 16,
+      "long_run_km_max": 18
+    },
+    {
+      "id": "p1",
+      "name": "第二期 · 构建",
+      "start": "2026-06-01",
+      "end": "2026-07-06",
+      "weeks_planned": 5,
+      "planned_week_km_min": 55,
+      "planned_week_km_max": 65,
+      "long_run_km_min": 18,
+      "long_run_km_max": 22
+    },
+    {
+      "id": "p2",
+      "name": "第三期 · 发展",
+      "start": "2026-07-07",
+      "end": "2026-08-10",
+      "weeks_planned": 5,
+      "planned_week_km_min": 55,
+      "planned_week_km_max": 65,
+      "long_run_km_min": 22,
+      "long_run_km_max": 24
+    },
+    {
+      "id": "p3",
+      "name": "第四期 · 专项",
+      "start": "2026-08-11",
+      "end": "2026-09-07",
+      "weeks_planned": 4,
+      "planned_week_km_min": 60,
+      "planned_week_km_max": 65,
+      "long_run_km_min": 24,
+      "long_run_km_max": 26
+    },
+    {
+      "id": "p4",
+      "name": "第五期 · 减量",
+      "start": "2026-09-08",
+      "end": "2026-09-28",
+      "weeks_planned": 3,
+      "planned_week_km_min": 25,
+      "planned_week_km_max": 45,
+      "long_run_km_min": null,
+      "long_run_km_max": null
+    }
+  ]
+}

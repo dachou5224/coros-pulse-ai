@@ -31,3 +31,22 @@ jobs:
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         BASE_URL: ${{ secrets.BASE_URL }}
       run: python src/analysis.py
+
+    - name: Export static JSON snapshots
+      env:
+        LANG: C.UTF-8
+        LC_ALL: C.UTF-8
+        PYTHONUTF8: "1"
+        GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_JSON_KEY }}
+      run: python scripts/export_static_data.py
+
+    - name: Sync static data to VPS
+      if: ${{ secrets.VPS_HOST != '' && secrets.VPS_USER != '' && secrets.VPS_KEY != '' }}
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USER }}
+        key: ${{ secrets.VPS_KEY }}
+        source: "show/static/data/*.json"
+        target: "/var/www/run-home/data"
+        strip_components: 3

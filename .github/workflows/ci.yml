@@ -17,6 +17,10 @@ jobs:
         with:
           python-version: "3.12"
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -24,3 +28,10 @@ jobs:
 
       - name: Compile Python
         run: python -m compileall -q src show
+
+      - name: Check static frontend scripts
+        run: |
+          node -e "const fs=require('fs'); new Function(fs.readFileSync('show/static/config.js','utf8')); new Function(fs.readFileSync('show/static/data.js','utf8')); const html=fs.readFileSync('show/static/index.html','utf8'); const blocks=[...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m=>m[1]).filter(Boolean); blocks.forEach((code,i)=>new Function(code)); console.log('static frontend syntax ok');"
+
+      - name: Export local static snapshots
+        run: python scripts/export_static_data.py

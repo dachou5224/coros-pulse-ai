@@ -1,5 +1,5 @@
 # Archive
 
-此目录用于存放已弃用或历史归档文件。
+此目录用于存放已弃用或历史归档文件，以及本地调试/E2E 产物。
 
-- **output/**：卡片渲染生成的示例图片（`ENABLE_CARD_RENDER=true` 时由 `card_render.py` 生成），供参考。日常运行时的生成输出位于项目根目录 `output/`（已加入 .gitignore，不会提交）。
+- **output/**：历史卡片示例与本地 E2E 导出结果。`output/local_e2e/` 下的 CSV 和截图可作为静态页、导出脚本和展示层的离线样例输入。

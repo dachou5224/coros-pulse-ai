@@ -11,6 +11,7 @@ credentials.json
 
 # Generated / build artifacts (root output/ only; archive/output/ is tracked)
 /output/
+/archive/output/local_e2e/
 
 # Streamlit
 .streamlit/secrets.toml
