@@ -265,47 +265,72 @@ def get_weekly_advice(weekly_activities_df, weekly_report_dict, recent_weeks_rep
     return out
 
 
+def _get_val(r, key, default=""):
+    if hasattr(r, "get"):
+        return r.get(key, default)
+    try:
+        return getattr(r, key, default)
+    except Exception:
+        return default
+
+
+def _fmt_run_line(r, is_target=False):
+    date = _get_val(r, "Date")
+    name = _get_val(r, "Name")
+    dist = _get_val(r, "Distance (km)")
+    dur = _get_val(r, "Duration (min)")
+    pace = _get_val(r, "Avg Pace")
+    hr = _get_val(r, "Avg HR")
+    cad = _get_val(r, "Cadence (spm)")
+    elev = _get_val(r, "Elevation Gain (m)")
+    tag = " [本单]" if is_target else ""
+    return f"  {date} | {name} | {dist} km | {dur} min | 配速 {pace} | 心率 {hr} | 步频 {cad} spm | 爬升 {elev} m{tag}"
+
+
 def get_activity_advice(activity_row, weekly_context=None, recent_activities: list = None) -> str:
     """
     根据单条跑步记录（及可选近期跑步、周报上下文）生成该次的教练点评。
-    activity_row: Series 或 dict，含 Date, Name, Distance (km), Duration (min), Avg Pace, Avg HR, Cadence, Elevation 等
-    recent_activities: 可选，近期 3–5 次跑步列表（dict 或 Series），按时间升序，最新在最后
-    weekly_context: 可选 dict，含 Fitness (CTL), Form (TSB), VDOT 等
-    跑者画像自动从环境变量 RUNNER_* 读取，可在 .env 中配置。
-    返回纯文本建议；失败返回空串。
     """
-    def _get(r, key, default=""):
-        if hasattr(r, "get"):
-            return r.get(key, default)
-        try:
-            return getattr(r, key, default)
-        except Exception:
-            return default
+    system = _load_prompt("activity_advice.md")
+    if not system:
+        print("⚠️ 警告：未找到 prompts/activity_advice.md")
+        return ""
 
-    def _fmt_run(r, is_target=False):
-        date = _get(r, "Date")
-        name = _get(r, "Name")
-        dist = _get(r, "Distance (km)")
-        dur = _get(r, "Duration (min)")
-        pace = _get(r, "Avg Pace")
-        hr = _get(r, "Avg HR")
-        cad = _get(r, "Cadence (spm)")
-        elev = _get(r, "Elevation Gain (m)")
-        tag = " [本单]" if is_target else ""
-        return f"  {date} | {name} | {dist} km | {dur} min | 配速 {pace} | 心率 {hr} | 步频 {cad} spm | 爬升 {elev} m{tag}"
-
-    system = (
-        "你是一位有15年带队经验的马拉松主教练，正在给熟悉的学员做单次训练复盘。\n"
-        "你需要输出给 Google Sheet 的结构化点评，供不同列分别写入。\n\n"
-
-        "【核心要求】\n"
-        "- 必须严格输出 5 段，并且每段都用下面的标签开头，标签名一字不差：\n"
-        "【总评】\n"
-        "【配速】\n"
-        "【心率】\n"
-        "【步频与爬升】\n"
-        "【下次训练课】\n"
-        "- 每个标签只能出现一次，不能遗漏，不能合并。\n"
+    profile_blob = (
+        f"【跑者画像】\n"
+        f"  性别/年龄: {RUNNER_PROFILE.get('gender', '未知')}/{RUNNER_PROFILE.get('age') or '未知'}岁\n"
+        f"  目标赛事: {RUNNER_PROFILE.get('goal_race', '半马/全马')}\n"
+        f"  目标成绩: {RUNNER_PROFILE.get('goal_time', '未设定')}\n"
+        f"  历史伤病: {RUNNER_PROFILE.get('injury_history', '无')}\n\n"
+    )
+    prompt_parts = []
+    prompt_parts.append("本单跑步数据：\n")
+    prompt_parts.append(_fmt_run_line(activity_row, is_target=True))
+    if weekly_context:
+        prompt_parts.append("\n当前周报参考: " + str({k: weekly_context.get(k) for k in ["Fitness (CTL)", "Form (TSB)", "VDOT"] if k in weekly_context}))
+    user = profile_blob + "".join(prompt_parts)
+    if recent_activities:
+        recent_lines = []
+        for r in recent_activities[-4:]:  # 最近4次
+            r_dict = r.to_dict() if hasattr(r, "to_dict") else r
+            recent_lines.append(
+                f"  {r_dict.get('Date','')} | {r_dict.get('Distance (km)','')}km "
+                f"| 配速{r_dict.get('Avg Pace','')} | 心率{r_dict.get('Avg HR','')}"
+            )
+        user += "\n\n最近训练背景（供参考，不要逐条点评）：\n" + "\n".join(recent_lines)
+    out = _call_llm(system, user, max_tokens=750)
+    if LLM_DELAY_SECONDS > 0:
+        time.sleep(LLM_DELAY_SECONDS)
+    return out
+'Distance (km)','')}km "
+                f"| 配速{r_dict.get('Avg Pace','')} | 心率{r_dict.get('Avg HR','')}"
+            )
+        user += "\n\n最近训练背景（供参考，不要逐条点评）：\n" + "\n".join(recent_lines)
+    out = _call_llm(system, user, max_tokens=750)
+    if LLM_DELAY_SECONDS > 0:
+        time.sleep(LLM_DELAY_SECONDS)
+    return out
+- 每个标签只能出现一次，不能遗漏，不能合并。\n"
         "- 每个标签后的内容只写该维度，不要串到别的维度。\n"
         "- 不要输出除这 5 段之外的任何前言、结尾、列表符号或 Markdown。\n\n"
 
