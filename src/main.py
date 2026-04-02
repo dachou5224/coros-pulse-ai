@@ -195,9 +195,10 @@ def main():
         print(f"读取现有表格出错或为空: {e}")
 
     # 2. 拉取清单
-    print("☁️ 正在拉取 Strava 活动清单...")
+    sync_limit = int(os.getenv('STRAVA_SYNC_LIMIT', '100'))
+    print(f"☁️ 正在拉取 Strava 活动清单 (limit={sync_limit})...")
     try:
-        summary_iterator = strava.get_activities(limit=3000) 
+        summary_iterator = strava.get_activities(limit=sync_limit) 
         
         to_sync_ids = []
         for summary in summary_iterator:

@@ -16,12 +16,13 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
-        python-version: '3.9'
+        python-version: '3.12'
+        cache: 'pip'
         
     - name: Install dependencies
       run: |
@@ -29,6 +30,7 @@ jobs:
         pip install -r requirements.txt
         
     - name: Run Analysis Script
+      continue-on-error: true
       env:
         GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_JSON_KEY }}
         API_KEY: ${{ secrets.API_KEY }}
@@ -37,6 +39,7 @@ jobs:
       run: python src/analysis.py
 
     - name: Export static JSON snapshots
+      if: always()
       env:
         LANG: C.UTF-8
         LC_ALL: C.UTF-8
@@ -45,7 +48,7 @@ jobs:
       run: python scripts/export_static_data.py
 
     - name: Sync static data to VPS
-      if: ${{ env.VPS_HOST != '' && env.VPS_USER != '' && env.VPS_KEY != '' }}
+      if: always() && env.VPS_HOST != '' && env.VPS_USER != '' && env.VPS_KEY != ''
       uses: appleboy/scp-action@v0.1.7
       with:
         host: ${{ secrets.VPS_HOST }}

@@ -209,6 +209,9 @@ def _render_section_html(title: str, text: str) -> str:
 
 def render_activity_advice_panel(activity_df: pd.DataFrame):
     st.markdown("#### 🧠 单次活动点评")
+    st.caption(
+        "仅展示 Sheet 中结构化列（总评、配速等）。若 LLM 未写入总评，不会用旧版「Advice」列回填，避免与新活动错配。"
+    )
     if activity_df.empty:
         st.info("未配置 `ACTIVITY_ADVICE_CSV_URL`，或当前未加载到 Activities CSV。")
         return

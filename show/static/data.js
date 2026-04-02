@@ -210,7 +210,7 @@
                 out[h] = v;
             }
         });
-        // 优先用 Advice，否则用 总评（activity_advice 写入列）
+        // 兼容：若存在「Advice」列且为空，用「总评」填入（仅用于旧脚本/导出；前端展示「总评」时勿反向用 Advice 回填，以免新活动未生成结构化点评时错显旧文）
         if (!out['Advice'] && out['总评']) out['Advice'] = out['总评'];
         return out;
     }

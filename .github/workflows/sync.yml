@@ -21,6 +21,7 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.12'
+        cache: 'pip'
 
     - name: Install dependencies
       run: |
@@ -39,6 +40,7 @@ jobs:
       run: python src/main.py
 
     - name: Run Activity Advice Script
+      continue-on-error: true
       env:
         LANG: C.UTF-8
         LC_ALL: C.UTF-8
@@ -57,6 +59,7 @@ jobs:
       run: python src/activity_advice.py
 
     - name: Export static JSON snapshots
+      if: always()
       env:
         LANG: C.UTF-8
         LC_ALL: C.UTF-8
@@ -65,7 +68,7 @@ jobs:
       run: python scripts/export_static_data.py
 
     - name: Sync static data to VPS
-      if: ${{ env.VPS_HOST != '' && env.VPS_USER != '' && env.VPS_KEY != '' }}
+      if: always() && env.VPS_HOST != '' && env.VPS_USER != '' && env.VPS_KEY != ''
       uses: appleboy/scp-action@v0.1.7
       with:
         host: ${{ secrets.VPS_HOST }}

@@ -2,6 +2,7 @@
 单次跑步教练点评：独立脚本，对最近 N 条尚未有点评的活动生成 AI 点评，
 解析五段（总评、配速、心率、步频与爬升、下次训练课）写入 sheet1；
 并写入「点评更新时间(UTC)」列，便于与历史点评区分。
+若表内存在旧版整段列「Advice」「Coach Advice」，在同一批次写入中空字符串清空，避免与新活动错配。
 可单独运行，便于接入 GitHub Actions workflow。
 """
 import re
@@ -43,6 +44,8 @@ ADVICE_SLOTS = ["总评", "配速", "心率", "步频与爬升", "下次训练�
 # 每次成功写入点评时更新，便于与历史点评区分（旧行无时间或时间为更早）
 META_COL = "点评更新时间(UTC)"
 ALL_ADVICE_HEADERS = ADVICE_SLOTS + [META_COL]
+# 结构化五段写入成功后清空这些单列，避免旧版整段文案残留、与「总评」空行错配（见 show 静态页展示逻辑）
+LEGACY_SINGLE_ADVICE_HEADERS = ("Advice", "Coach Advice")
 # 连续请求 Gemini 间隔（秒），减轻 Connection error；环境变量设为 0 可关闭
 _ADVICE_LOOP_DELAY = float(os.getenv("ACTIVITY_ADVICE_DELAY_SECONDS") or "1.25")
 
@@ -103,10 +106,25 @@ def _retry_gspread_write(fn, *, max_attempts=6):
             raise
 
 
+def _legacy_single_advice_columns_1based(headers: list[str]) -> list[int]:
+    """表头中旧版整段点评列 → 1-based 列号（用于写入成功后清空）。"""
+    out: list[int] = []
+    for name in LEGACY_SINGLE_ADVICE_HEADERS:
+        if name in headers:
+            out.append(headers.index(name) + 1)
+    return out
+
+
 def _write_advice_slots_batch(
-    worksheet, row_num: int, col_indices: dict, slots: dict, *, utc_stamp: str
+    worksheet,
+    row_num: int,
+    col_indices: dict,
+    slots: dict,
+    *,
+    utc_stamp: str,
+    clear_legacy_cols_1based: list[int] | None = None,
 ) -> None:
-    """单行五段点评 + 可选时间戳列，一次 values_batchUpdate。"""
+    """单行五段点评 + 可选时间戳列 + 清空遗留 Advice 列，一次 values_batchUpdate。"""
     data = []
     for tag in ADVICE_SLOTS:
         col = col_indices[tag]
@@ -115,6 +133,9 @@ def _write_advice_slots_batch(
     if META_COL in col_indices:
         mc = col_indices[META_COL]
         data.append({"range": rowcol_to_a1(row_num, mc), "values": [[utc_stamp]]})
+    if clear_legacy_cols_1based:
+        for c in clear_legacy_cols_1based:
+            data.append({"range": rowcol_to_a1(row_num, c), "values": [[""]]})
 
     def _do():
         return worksheet.batch_update(data)
@@ -264,10 +285,18 @@ def main():
             activities_ws.update_cell(1, next_col, tag)
             col_indices[tag] = next_col
             next_col += 1
+    headers = activities_ws.row_values(1)
+    legacy_clear_cols = _legacy_single_advice_columns_1based(headers)
     print(
         f"📌 表头已就绪：点评列 {len(ADVICE_SLOTS)} 个；"
         f"「{META_COL}」列用于标记本次写入时间，便于与旧点评区分。"
     )
+    _legacy_header_labels = [h for h in LEGACY_SINGLE_ADVICE_HEADERS if h in headers]
+    if legacy_clear_cols:
+        print(
+            "📌 若表内存在旧版整段列，将在每次结构化写入成功后清空: "
+            + ", ".join(_legacy_header_labels)
+        )
 
     # LLM：无密钥时 coach 静默返回空串，易被误认为「脚本没跑」——此处明确提示（尤其 GitHub Actions）
     _has_llm = bool(_coach and getattr(_coach, "API_KEY", "").strip())
@@ -369,7 +398,12 @@ def main():
         try:
             utc_stamp_cell = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
             _write_advice_slots_batch(
-                activities_ws, sheet_row, col_indices, slots, utc_stamp=utc_stamp_cell
+                activities_ws,
+                sheet_row,
+                col_indices,
+                slots,
+                utc_stamp=utc_stamp_cell,
+                clear_legacy_cols_1based=legacy_clear_cols or None,
             )
             ok, verify_msg = _verify_written_row(
                 activities_ws,

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Nice AI - Run | 周期训练周报</title>
-    <link rel="stylesheet" href="styles.css?v=20260331b">
+    <link rel="stylesheet" href="styles.css?v=20260331c">
     <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 </head>
@@ -67,7 +67,7 @@
             <aside class="layout-side">
                 <div id="activity-advice-block" class="activity-advice-block" style="display:none;">
                     <h3>单次跑步教练点评</h3>
-                    <p class="metric-delta">展示最新活动的结构化点评。默认读取同源 JSON 快照，也支持通过 <code>?activity_advice=URL</code> 覆盖。</p>
+                    <p class="metric-delta">展示最新活动的结构化点评（总评/配速/心率等列）。总评为空时不再回退旧版 <code>Advice</code> 列，以免新活动错配旧 LLM 文案。默认读取同源 JSON 快照，也支持 <code>?activity_advice=URL</code> 覆盖。</p>
                     <div id="activity-advice-list"></div>
                 </div>
                 <div id="training-followup-block" class="activity-advice-block" style="display:none;">
@@ -123,8 +123,8 @@
         <p class="metric-delta">Designed with ❤️ by Coros-Pulse-AI</p>
     </div>
 
-    <script src="config.js?v=20260331b"></script>
-    <script src="data.js?v=20260331b"></script>
+    <script src="config.js?v=20260331c"></script>
+    <script src="data.js?v=20260331c"></script>
     <script>
         (function () {
             function fmtDate(d) {
@@ -248,6 +248,13 @@
                 }
             }
 
+            /** 仅使用结构化列展示，不回退 legacy「Advice」列，避免新活动尚无总评时错显旧点评 */
+            function structuredSection(r, key) {
+                var v = r[key];
+                if (v == null || String(v).trim() === '') return '暂无（结构化点评待生成）';
+                return String(v);
+            }
+
             function renderActivityAdvice(rows) {
                 var block = document.getElementById('activity-advice-block');
                 var list = document.getElementById('activity-advice-list');
@@ -265,11 +272,11 @@
                     var dist = r['Distance (km)'] != null ? r['Distance (km)'] : '-';
                     var pace = (r['Avg Pace'] || '-').toString();
                     var sections = [
-                        ['总评', r['总评'] || r['Advice'] || '暂无'],
-                        ['配速', r['配速'] || '暂无'],
-                        ['心率', r['心率'] || '暂无'],
-                        ['步频与爬升', r['步频与爬升'] || '暂无'],
-                        ['下次训练课', r['下次训练课'] || '暂无']
+                        ['总评', structuredSection(r, '总评')],
+                        ['配速', structuredSection(r, '配速')],
+                        ['心率', structuredSection(r, '心率')],
+                        ['步频与爬升', structuredSection(r, '步频与爬升')],
+                        ['下次训练课', structuredSection(r, '下次训练课')]
                     ];
                     html += '<div class="run-advice-card advice-card">';
                     html += '<div class="run-advice-summary">' + dateStr + ' · ' + name + ' · ' + dist + ' km · 配速 ' + pace + '</div>';
